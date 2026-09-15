@@ -1,0 +1,2243 @@
+Six v0.1
+
+A Microscopic General-Purpose Programming Language
+
+Six is a general-purpose programming language built around one constraint:
+
+
+
+Use the smallest practical set of programming concepts capable of expressing ordinary software.
+
+Six is not an exercise in theoretical minimalism. It is intended to remain readable, useful, teachable, and capable of supporting real programs.
+
+The language has six fundamental concepts:
+
+
+
+
+
+Values
+
+
+
+Names
+
+
+
+Operations
+
+
+
+Functions
+
+
+
+Conditionals
+
+
+
+Groups
+
+Everything else should emerge from these concepts wherever practical.
+
+Repetition comes from functions and recursion. Stacks and queues are patterns of Group access, not separate types. Map-like structures are represented with Groups rather than a separate dictionary type.
+
+The goal is not merely small syntax.
+
+The goal is a language small enough that a human can learn essentially the entire language in one sitting, and small enough that an AI can ingest the complete authoritative specification as context and immediately begin producing valid programs.
+
+
+
+This is Claude's best documentation suggestion, especially for the AI use case. It should explicitly warn models/programmers about the things their instincts will otherwise get wrong:
+
+
+
+
+
+Groups use whitespace rather than commas.
+
+
+
+Groups are reference-semantic; ordinary simple values are value-semantic.
+
+
+
+:: deep-copies.
+
+
+
+Numeric brackets are always positional.
+
+
+
+Missing keyed reads error.
+
+
+
+Missing keyed writes create the key.
+
+
+
+Empty and nonexistent are different.
+
+
+
+No for, while, or repetition primitive.
+
+
+
+Repetition uses recursion with guaranteed tail-call optimization.
+
+
+
+Subject comes first in functions intended for >>.
+
+
+
+>> feeds the flowing value into parameter one.
+
+
+
+Dot is flow sugar, not methods.
+
+
+
++ concatenates text, not Groups.
+
+
+
+insert and remove mutate and return empty.
+
+
+
+There is no special Stack, Queue, Map, Tuple, or Object type.
+
+
+
+if already handles multiple branches; there is no elif.
+
+
+
+if any executes every matching branch.
+
+
+
+Function results are values; they are not automatically printed.
+
+
+
+1. Design Principles
+
+1.1 Microscopic semantics
+
+Adding syntax or vocabulary requires justification.
+
+Six should not contain a feature merely because other languages contain it.
+
+Before adding something, ask:
+
+
+
+Can the programmer already express this clearly with the existing tools?
+
+If yes, Six probably does not need another feature.
+
+
+
+1.2 Minimal vocabulary
+
+The same principle applies to the standard library.
+
+A function does not deserve a standard name merely because several existing operations can be wrapped inside one.
+
+For example, Six does not need:
+
+push
+pop
+enqueue
+dequeue
+
+
+A stack is already:
+
+insert stack value
+
+value : stack[$]
+remove stack $
+
+
+A queue is already:
+
+insert queue value
+
+value : queue[0]
+remove queue 0
+
+
+The raw operations are clearer than the borrowed abstractions.
+
+A library function earns its name when the name communicates a useful operation that is otherwise awkward or unclear to express.
+
+
+
+Explicitly define both forms:
+
+insert group value
+
+appends value to the end.
+
+insert group value index
+
+inserts value at the specified position and shifts later members right.
+
+Both mutate the Group and yield empty.
+
+remove group index removes that position, shifts later members left, and yields empty.
+
+
+
+1.3 Explicit behavior
+
+Six favors visible behavior over hidden behavior.
+
+There is:
+
+
+
+
+
+no truthiness
+
+
+
+no implicit type coercion
+
+
+
+no implicit creation of undeclared names
+
+
+
+no hidden loop state
+
+
+
+no implicit printing
+
+
+
+no separate return keyword
+
+
+
+no special Stack or Queue semantics
+
+A program should expose what it is doing.
+
+
+
+1.4 Minimal semantics, generous ergonomics
+
+Six may provide shorthand when shorthand does not introduce a new concept.
+
+For example:
+
+if
+else
+if any
+
+
+are the canonical conditional forms.
+
+Their symbolic shorthand is:
+
+?
+??
+?*
+
+
+The shorthand does not add new semantics.
+
+
+
+2. Values
+
+Six programs operate on values.
+
+The primary value categories are:
+
+
+
+
+
+number
+
+
+
+text
+
+
+
+boolean
+
+
+
+Group
+
+
+
+function
+
+
+
+empty value
+
+
+
+3. Numbers
+
+Examples:
+
+5
+42
+3.14159
+1,000
+1,000,000
+12,345.67
+
+
+Commas may be used as thousands separators.
+
+They must use proper three-digit grouping.
+
+Valid:
+
+1,000
+10,000
+1,000,000
+
+
+Invalid:
+
+10,00
+1,00,000
+
+
+
+
+4. Text
+
+Text uses double quotes:
+
+"Hello"
+"Dan"
+""
+
+
+Text is an ordinary value type.
+
+Text is:
+
+
+
+
+
+copied under normal assignment
+
+
+
+positionally indexable
+
+
+
+mutable by position
+
+
+
+not a Group
+
+Example:
+
+name : "Dan"
+letter : name[0]
+
+
+Text does not support keyed lookup.
+
+name["first"]
+
+
+is an error.
+
+
+
+5. Booleans
+
+Six has two Boolean values:
+
+true
+false
+
+
+There is no truthiness.
+
+Conditions and logical operators require actual Boolean values.
+
+This is invalid:
+
+if 5 >> ...
+
+
+unless the expression explicitly produces a Boolean.
+
+
+
+6. Empty Values
+
+Six does not treat emptiness as a conventional null object type.
+
+Emptiness is a state a value may have.
+
+Generic empty:
+
+..
+
+
+The word:
+
+nil
+
+
+may also represent generic emptiness.
+
+Typed empty values may retain type information:
+
+text ..
+number ..
+[]
+
+
+Here:
+
+[]
+
+
+is specifically an empty Group.
+
+..          # generic empty
+
+nil         # synonym for generic empty
+
+text ..     # empty text
+
+number ..   # empty number
+
+[]          # empty Group
+
+
+
+size ..        # 0
+
+size nil       # 0
+
+size []        # 0
+
+size (text ..) # 0
+
+
+
+[][$]          # error
+
+[][0]          # error
+
+
+
+6.1 Empty is not nonexistent
+
+This distinction is fundamental.
+
+x : ..
+print x
+
+
+is valid.
+
+x exists. Its value is empty.
+
+But:
+
+print y
+
+
+when y has never been declared is an error.
+
+Therefore:
+
+
+
+Empty means a value exists but contains nothing. Nonexistent means there is no value to retrieve.
+
+The same principle applies to Group members.
+
+If a key exists and contains an empty value, retrieving it returns that empty value.
+
+If the key does not exist, retrieval errors.
+
+
+
+7. Names
+
+Names bind values.
+
+7.1 New binding
+
+x : 5
+name : "Dan"
+
+
+: creates a new name in the current scope.
+
+Attempting to create the same name twice in the same scope is an error.
+
+
+
+7.2 Rebinding
+
+x = 7
+
+
+= changes an existing binding.
+
+Using = on an undefined name is an error.
+
+
+
+7.3 Deep-copy binding
+
+copy :: source
+
+
+:: creates an independent deep copy.
+
+Nested Groups are recursively copied.
+
+
+
+7.4 Immutable names
+
+Names beginning with uppercase characters represent immutable bindings.
+
+Examples:
+
+PI : 3.14159
+WHITE : [255 255 255]
+
+
+The bound value cannot be mutated through that immutable binding.
+
+Explicitly state:
+
+
+
+Immutability is determined by the name, not by the binding operator. An uppercase-leading name is immutable whether initially bound with : or ::.
+
+So:
+
+x : 5       # mutable binding
+X : 5       # immutable binding
+X :: source # immutable deep-copy binding
+
+
+
+8. Value and Reference Semantics
+
+Simple values behave as values.
+
+This includes:
+
+
+
+
+
+numbers
+
+
+
+text
+
+
+
+booleans
+
+
+
+functions
+
+
+
+empty values
+
+Ordinary binding copies these values.
+
+Groups use reference semantics.
+
+Example:
+
+a : [1 2 3]
+b : a
+
+
+a and b refer to the same Group.
+
+Mutation through either name affects the shared Group.
+
+To create an independent Group:
+
+b :: a
+
+
+
+
+8.1 Function arguments
+
+Function arguments follow the same rules.
+
+Passing a Group passes access to the same Group.
+
+Passing a number, Boolean, text value, function, or empty value passes the ordinary value.
+
+Rebinding a parameter does not rebind the caller's name.
+
+Mutating a Group parameter does mutate the shared Group.
+
+
+
+9. Groups
+
+A Group is Six's general structural value.
+
+Groups are:
+
+
+
+
+
+ordered
+
+
+
+indexable
+
+
+
+mutable
+
+
+
+heterogeneous
+
+
+
+nestable
+
+Examples:
+
+[1 2 3]
+
+["Dan" 46 true]
+
+[1 2 [3 4]]
+
+[]
+
+
+No commas are required between members.
+
+
+
+10. Group Literals and Expression Boundaries
+
+Whitespace separates simple members in ordinary inline Groups:
+
+[1 2 3]
+[a b c]
+["Dan" 46 true]
+
+
+Because Six also uses whitespace for function application, compound call expressions inside a Group must have a clear boundary.
+
+Use parentheses inline:
+
+[(name person) (age person)]
+
+
+Or use one member expression per line:
+
+[
+    name person
+    age person
+]
+
+
+This prevents ambiguous forms such as:
+
+[name person age person]
+
+
+from being interpreted by guessing function arity.
+
+Six does not inspect runtime values to determine where one expression ends and another begins.
+
+
+
+11. Indexing
+
+Indexing uses square brackets.
+
+Indexes are zero-based.
+
+group[0]
+group[1]
+text[0]
+
+
+Negative indexes are not supported.
+
+Out-of-range positional access is an error.
+
+
+
+11.1 Final position
+
+$ means the final valid position.
+
+group[$]
+text[$]
+
+
+Example:
+
+values : [10 20 30]
+last : values[$]
+
+
+last becomes 30.
+
+Using $ on an empty Group or empty text value produces an index error because no final position exists.
+
+
+
+12. Keyed Groups
+
+Six does not require a separate dictionary or map type.
+
+Keyed structures are represented as Groups containing two-member Groups.
+
+Example:
+
+person : [
+    ["name" "Dan"]
+    ["age" 46]
+]
+
+
+Keyed lookup:
+
+person["name"]
+
+
+returns:
+
+"Dan"
+
+
+
+
+12.1 Lookup rules
+
+A nonnumeric index performs keyed lookup.
+
+Six searches direct members of the Group for a two-member Group whose first member equals the requested key.
+
+The second member is returned.
+
+Example:
+
+person["age"]
+
+
+Duplicate keys are permitted.
+
+The first matching pair wins.
+
+Direct members that are not two-member Groups are ignored during keyed lookup.
+
+
+
+12.2 Missing keys
+
+Reading a nonexistent key is an error.
+
+person["banana"]
+
+
+errors if "banana" does not exist.
+
+This preserves the distinction between:
+
+["middle_name" text ..]
+
+
+and no "middle_name" key at all.
+
+
+
+12.3 Key existence
+
+Programs that need to distinguish existence should use an operation such as:
+
+has? person "middle_name"
+
+
+or the equivalent dot form:
+
+person.has? "middle_name"
+
+
+has? belongs in the standard library because existence is semantically distinct from emptiness.
+
+
+
+12.4 Numeric indexes
+
+Numeric indexes always mean positional indexing.
+
+Therefore numeric keys are not directly supported through bracket lookup.
+
+A numeric-looking identifier should be represented as text:
+
+person["123"]
+
+
+
+
+13. Keyed Assignment
+
+Assignment through an existing key replaces the first matching value.
+
+person["age"] = 47
+
+
+If the key does not exist, keyed assignment appends a new key/value pair.
+
+Example:
+
+person["city"] = "Colorado Springs"
+
+
+adds:
+
+["city" "Colorado Springs"]
+
+
+to the Group.
+
+Therefore keyed reads and keyed writes intentionally differ:
+
+person["missing"]
+
+
+errors.
+
+But:
+
+person["missing"] = 1
+
+
+creates the key.
+
+
+
+14. Positional Assignment
+
+Existing positional members may be replaced:
+
+group[0] = value
+text[0] = "A"
+
+
+Attempting to replace a nonexistent positional member is an error.
+
+
+
+15. Group Mutation
+
+The fundamental mutation operations include:
+
+insert group value
+remove group index
+
+
+insert adds a member.
+
+remove removes a member.
+
+These operations mutate the Group in place.
+
+They yield empty.
+
+They do not return the Group or the removed value.
+
+
+
+15.1 Mutation plus result
+
+When a program needs both mutation and a result, it explicitly reads the value first.
+
+Example:
+
+value : group[$]
+remove group $
+value
+
+
+The final value becomes the function result.
+
+This avoids giving mutation operations multiple overlapping meanings.
+
+
+
+16. Open / Split Group
+
+A Group may be passed whole:
+
+something config
+
+
+If:
+
+config : ["Six" 100 100 800 600]
+
+
+then something config passes one argument: the Group itself.
+
+A new one-member Group containing config is:
+
+something [config]
+
+
+To open a Group and pass its direct members as separate parameters:
+
+something <config>
+
+
+Conceptually:
+
+[ ]
+
+
+contains inward.
+
+< >
+
+
+opens outward.
+
+
+
+17. Operations
+
+Arithmetic operators:
+
++
+-
+*
+/
+%
+
+
+Comparison operators:
+
+==
+!=
+<
+>
+<=
+>=
+
+
+Logical operators:
+
+and
+or
+not
+
+
+Symbolic forms may also be supported:
+
+&&
+||
+!
+
+
+Logical operands must be Boolean.
+
+
+
+18. Text Concatenation
+
++ concatenates text when both operands are text.
+
+"Hello, " + name
+
+
+Mixed-type concatenation is not performed.
+
+This is an error:
+
+"Age: " + 46
+
+
+Convert explicitly:
+
+"Age: " + text 46
+
+
++ does not imply Group concatenation.
+
+
+
+19. Conversion
+
+Conversions are ordinary callable operations.
+
+Examples:
+
+number x
+text x
+
+
+Conversions must be explicit.
+
+Invalid conversions produce an error.
+
+Dot-flow shorthand may also be used:
+
+x.number
+x.text
+
+
+
+
+20. Functions
+
+Functions are declared using >>.
+
+Example:
+
+>> add: [x y] >>
+    x + y
+.
+
+
+The parameter structure:
+
+[x y]
+
+
+is not a runtime Group.
+
+It is the ordered parameter structure of the function.
+
+
+
+Clarify the two roles of >>
+
+This needs to be explicit.
+
+At the beginning of a declaration:
+
+>> add: [x y] >>
+    x + y
+.
+
+>> name... introduces a function declaration.
+
+Between expressions:
+
+10 >>
+add 5
+
+>> is transformation flow.
+
+And the key rule:
+
+
+
+In a transformation chain, the current flowing value becomes the first argument of the next callable stage.
+
+Therefore:
+
+x >> print
+
+means:
+
+print x
+
+while bare:
+
+print
+
+outside a chain is merely the function value and performs no output.
+
+
+
+20.1 Single-expression functions
+
+A function may be written compactly:
+
+>> add: [x y] >> x + y
+
+
+
+
+20.2 Zero-parameter functions
+
+A function with no parameters omits the parameter structure:
+
+>> greet >>
+    print "Hello"
+.
+
+
+
+
+21. Function Calls
+
+Function calls use whitespace.
+
+add 2 3
+print "Hello"
+size group
+
+
+No call punctuation is required.
+
+Parentheses group nested expressions:
+
+print (text (size values))
+
+
+Parentheses are expression grouping, not special function-call syntax.
+
+
+
+22. Functions as Values
+
+Functions are first-class values.
+
+Given:
+
+>> square: [x] >>
+    x * x
+.
+
+
+then:
+
+square
+
+
+refers to the function value.
+
+And:
+
+square 5
+
+
+calls it.
+
+Functions may be passed to other functions:
+
+apply square 5
+
+
+
+
+23. Function Results
+
+Six has no return keyword.
+
+A function produces the value of the result expression deliberately left at the end of its body.
+
+Example:
+
+>> first: [group] >>
+    group[0]
+.
+
+
+The function evaluates to:
+
+group[0]
+
+
+Another example:
+
+>> build: [x y] >>
+    result : [x y]
+    result
+.
+
+
+returns the new Group.
+
+A function may instead expose part of that Group:
+
+>> build-first: [x y] >>
+    result : [x y]
+    result[0]
+.
+
+
+Returning a value does not print it.
+
+
+
+Our actual rule is still:
+
+
+
+A function evaluates to its final expression.
+
+The programmer chooses the return value by deliberately making that expression last:
+
+>> something: [x] >>
+    result : do-work x
+    result
+.
+
+I would avoid calling that an “explicit return” in the formal spec because there is no return syntax. It's final-expression return semantics.
+
+
+
+23.1 Effect-only functions
+
+If the final operation yields empty, the function yields empty.
+
+Example:
+
+>> announce: [message] >>
+    print message
+.
+
+
+announce prints the message.
+
+It does not automatically return the printed message.
+
+
+
+23.2 No implicit multi-return mechanism
+
+Functions produce one value.
+
+If several logical results are needed, return a Group:
+
+>> pair: [x y] >>
+    [x y]
+.
+
+
+Function results may themselves be placed into Groups:
+
+results : [
+    first data
+    second data
+]
+
+
+or inline with explicit grouping:
+
+results : [(first data) (second data)]
+
+
+
+
+24. Scope
+
+Six uses lexical scope.
+
+Names defined outside a function are visible inward unless shadowed.
+
+Names created inside a function are local to that function.
+
+The nearest matching name wins.
+
+Functions may form lexical closures.
+
+
+
+25. Recursion
+
+Repetition is not a fundamental language construct.
+
+Six does not require:
+
+for
+while
+repeat
+
+
+Repetition is expressed through function calls and recursion.
+
+Example:
+
+>> countdown: [n] >>
+    if
+        n <= 0 >> ..
+        else >>
+            print n
+            countdown (n - 1)
+    .
+.
+
+
+
+
+25.1 Tail calls
+
+The Six runtime must guarantee bounded-stack execution for tail calls.
+
+A properly tail-recursive program must be usable for ordinary repetition without consuming unbounded call stack.
+
+This is required language behavior, not an optional implementation optimization.
+
+
+
+26. Conditionals
+
+The canonical conditional vocabulary is:
+
+if
+else
+if any
+
+
+Six does not need:
+
+elif
+elseif
+else if
+
+
+because one conditional may contain multiple ordered conditions.
+
+
+
+27. if
+
+if evaluates conditions from top to bottom.
+
+The first true branch executes.
+
+Example:
+
+if
+    x > 10 >> print "big"
+    x > 5  >> print "medium"
+    x > 0  >> print "small"
+    else   >> print "nothing"
+.
+
+
+No elif is necessary.
+
+
+
+28. else
+
+else is the fallback branch.
+
+It runs if none of the preceding conditions match.
+
+Example:
+
+if
+    age >= 18 >> print "adult"
+    else      >> print "minor"
+.
+
+
+
+
+29. if any
+
+if any evaluates all conditions.
+
+Every true branch executes.
+
+Example:
+
+if any
+    x > 10  >> print "big"
+    x > 0   >> print "positive"
+    x.even? >> print "even"
+    else    >> print "nothing matched"
+.
+
+
+else executes only if none of the conditions matched.
+
+
+
+30. Conditional Shorthand
+
+The symbolic forms are optional shorthand:
+
+?   == if
+??  == else
+?*  == if any
+
+
+Example:
+
+?
+    x > 10 >> print "big"
+    ??     >> print "small"
+.
+
+
+The word forms are canonical and should generally be used for teaching and documentation.
+
+
+
+Add a tiny identifier/naming rule:
+
+
+
+? may appear at the end of an identifier. By convention, names ending in ? are Boolean predicates. The suffix has no special evaluation semantics.
+
+So:
+
+even?
+has?
+empty?
+valid?
+
+are simply legal function names.
+
+
+
+31. Conditionals as Values
+
+A conditional may produce a value.
+
+Example:
+
+message :
+    if
+        guess < answer >> "Too low."
+        else           >> "Too high."
+    .
+
+
+message receives the value produced by the selected branch.
+
+This allows programs to separate deciding a value from acting on that value.
+
+Example:
+
+message :
+    if
+        guess < answer >> "Too low."
+        else           >> "Too high."
+    .
+
+print message
+
+
+
+
+32. Blocks
+
+A standalone period terminates a block:
+
+.
+
+
+Indentation is for readability.
+
+The period is the structural terminator.
+
+Example:
+
+>> add: [x y] >>
+    x + y
+.
+
+
+Nested blocks each terminate independently.
+
+
+
+33. Statements and Newlines
+
+A newline normally ends an expression.
+
+Example:
+
+x : 5
+y : 10
+print x
+
+
+An obviously incomplete expression may continue onto the next line:
+
+total : price + tax +
+    shipping + insurance
+
+
+Parentheses may also be used for explicit grouping.
+
+There are no semicolons.
+
+
+
+34. Comments
+
+Comments begin with:
+
+#
+
+
+Example:
+
+# Calculate total
+total : price + tax
+
+
+
+
+35. Transformation Flow
+
+>> also represents forward transformation.
+
+Example:
+
+10 >>
+add 5 >>
+multiply 2 >>
+subtract 4
+
+
+The flowing result becomes the first parameter of the next call-stage.
+
+Conceptually:
+
+add 10 5
+multiply result 2
+subtract result 4
+
+
+This encourages subject-first function design.
+
+Example:
+
+>> subtract: [x y] >>
+    x - y
+.
+
+
+Then:
+
+10 >> subtract 3
+
+
+means:
+
+subtract 10 3
+
+
+
+
+35.1 Bare function values
+
+A bare function name is still a function value.
+
+Six does not silently print or perform some other effect merely because an identifier appears.
+
+For example:
+
+print
+
+
+is not equivalent to:
+
+print value
+
+
+Effects require actual arguments.
+
+This distinction must remain visible in the grammar and evaluator.
+
+
+
+The current wording is misleading because it was written after we temporarily thought >> print shouldn't work.
+
+It should instead say:
+
+print
+
+is a function value.
+
+But:
+
+value >> print
+
+calls:
+
+print value
+
+No contradiction.
+
+
+
+36. Dot Flow
+
+Dot syntax is flow/call shorthand, not object-oriented method dispatch.
+
+Example:
+
+x.size
+
+
+means conceptually:
+
+size x
+
+
+And:
+
+x.size.text
+
+
+means:
+
+text (size x)
+
+
+Dot means:
+
+
+
+take this value and flow it through this operation.
+
+It does not imply classes, methods, ownership, or object dispatch.
+
+
+
+36.1 Dot versus brackets
+
+Dot is transformation/flow.
+
+Brackets are structural access.
+
+Example:
+
+person["name"]
+
+
+accesses structure.
+
+Six does not turn this into:
+
+person.name
+
+
+because dot syntax has a different conceptual job.
+
+
+
+37. Standard Library Philosophy
+
+The standard library should remain deliberately small.
+
+The inclusion test is not:
+
+
+
+Can we wrap this behavior in a named function?
+
+The inclusion test is:
+
+
+
+Does naming this operation make Six clearer or materially easier to use?
+
+For example:
+
+has?
+
+
+earns a standard-library place because structural existence is semantically important and cannot safely be inferred from a value being empty.
+
+By contrast:
+
+push
+pop
+enqueue
+dequeue
+
+
+do not earn standard names because the underlying Group operations are already clearer.
+
+
+
+38. Derived Operations
+
+Operations such as the following may exist in the standard library:
+
+size
+has?
+split
+map
+filter
+fold
+find
+number
+text
+input
+print
+insert
+remove
+
+
+Their existence does not make them new fundamental language concepts.
+
+Where practical, library operations should themselves be implementable in Six.
+
+Runtime-level operations are appropriate where the language cannot implement them internally, such as:
+
+
+
+
+
+terminal input/output
+
+
+
+operating-system access
+
+
+
+randomness
+
+
+
+low-level storage operations
+
+
+
+external networking
+
+
+
+similar host services
+
+
+
+Minimal contract:
+
+input
+
+reads one line of text.
+
+input "Enter name: "
+
+displays the prompt and then reads one line of text.
+
+The result is text.
+
+
+
+Minimal contract:
+
+split text delimiter
+
+returns a Group of text values produced by splitting text on delimiter.
+
+Because of subject-first flow:
+
+text >> split " "
+
+works naturally.
+
+
+
+39. Example: fold
+
+A higher-order operation can be implemented using existing Six machinery:
+
+>> fold: [list init f] >>
+    _fold list init f 0
+.
+
+>> _fold: [list acc f i] >>
+    if
+        i >= size list >> acc
+        else           >> _fold list (f acc (list[i])) f (i + 1)
+    .
+.
+
+
+No loop syntax is required.
+
+
+
+40. Example: map
+
+>> map: [list f] >>
+    _map list f 0 []
+.
+
+>> _map: [list f i result] >>
+    if
+        i >= size list >> result
+        else >>
+            insert result (f (list[i]))
+            _map list f (i + 1) result
+    .
+.
+
+
+The accumulating Group is intentionally shared through reference semantics.
+
+
+
+41. Example: filter
+
+>> filter: [list f] >>
+    _filter list f 0 []
+.
+
+>> _filter: [list f i result] >>
+    if
+        i >= size list >> result
+        else >>
+            if f (list[i]) >>
+                insert result (list[i])
+            .
+            _filter list f (i + 1) result
+    .
+.
+
+
+
+
+42. Example: find
+
+>> find: [list f] >>
+    _find list f 0
+.
+
+>> _find: [list f i] >>
+    if
+        i >= size list >> ..
+        f (list[i])    >> list[i]
+        else           >> _find list f (i + 1)
+    .
+.
+
+
+
+
+43. Example: Word Frequency Counter
+
+>> count: [words counts i] >>
+    if
+        i >= size words >> counts
+        else >>
+            word : words[i]
+
+            if
+                counts.has? word >> counts[word] = counts[word] + 1
+                else             >> counts[word] = 1
+            .
+
+            count words counts (i + 1)
+    .
+.
+
+>> frequencies: [source] >>
+    words : source.split " "
+    count words [] 0
+.
+
+
+This demonstrates:
+
+
+
+
+
+keyed Groups
+
+
+
+has?
+
+
+
+read-error/write-create semantics
+
+
+
+reference mutation
+
+
+
+recursion
+
+
+
+local rebinding
+
+
+
+44. Example: Guessing Game Structure
+
+>> ask: [answer attempts] >>
+    guess : number (input "Guess a number from 1 to 100: ")
+    check answer attempts guess
+.
+
+>> check: [answer attempts guess] >>
+    attempts = attempts + 1
+
+    if
+        guess == answer >>
+            print "Correct!"
+            print ("Attempts: " + text attempts)
+
+        else >>
+            message :
+                if
+                    guess < answer >> "Too low."
+                    else           >> "Too high."
+                .
+
+            print message
+            ask answer attempts
+    .
+.
+
+
+This demonstrates:
+
+
+
+
+
+explicit recursive state
+
+
+
+conditional values
+
+
+
+explicit effects
+
+
+
+termination through absence of another recursive call
+
+
+
+45. Example: Stack Behavior
+
+Six does not need a Stack type.
+
+stack : []
+
+insert stack 10
+insert stack 20
+insert stack 30
+
+value : stack[$]
+remove stack $
+
+
+After removal:
+
+stack
+
+
+contains:
+
+[10 20]
+
+
+and:
+
+value
+
+
+contains:
+
+30
+
+
+
+
+46. Example: Queue Behavior
+
+Six does not need a Queue type.
+
+queue : []
+
+insert queue "A"
+insert queue "B"
+insert queue "C"
+
+value : queue[0]
+remove queue 0
+
+
+The same Group machinery produces queue behavior merely by changing the accessed position.
+
+
+
+47. Errors
+
+Six should fail explicitly for invalid operations.
+
+Runtime or compile-time errors include:
+
+
+
+
+
+undefined names
+
+
+
+rebinding an undefined name
+
+
+
+redeclaring a name in the same scope
+
+
+
+invalid positional index
+
+
+
+missing keyed lookup
+
+
+
+keyed lookup on text
+
+
+
+wrong function arity
+
+
+
+calling a non-function
+
+
+
+incompatible operands
+
+
+
+mixed-type operations without conversion
+
+
+
+division by zero
+
+
+
+invalid conversion
+
+
+
+non-Boolean conditional expression
+
+
+
+non-Boolean logical operand
+
+
+
+mutation through an immutable binding
+
+
+
+malformed literal
+
+
+
+malformed numeric separator
+
+
+
+malformed Group expression
+
+
+
+stray block terminator
+
+
+
+unsupported size operation
+
+Six should prefer an error to silently inventing meaning.
+
+
+
+48. Source Files
+
+Six v0.1 treats one source file as one complete program.
+
+There are no required:
+
+modules
+packages
+imports
+namespaces
+
+
+in the minimal language.
+
+These may be reconsidered only if real programs demonstrate that they are necessary.
+
+
+
+49. Implementation Independence
+
+This specification describes Six itself.
+
+The implementation language must not leak into Six semantics.
+
+Six may be implemented in:
+
+
+
+
+
+Rust
+
+
+
+C
+
+
+
+C++
+
+
+
+Zig
+
+
+
+Go
+
+
+
+Goblin
+
+
+
+another suitable language
+
+without changing the language model described here.
+
+
+
+50. The Six Test
+
+A proposed language feature should survive three questions.
+
+1. Is it fundamentally necessary?
+
+Can existing Six express the behavior?
+
+2. Does naming it improve clarity?
+
+A convenience that merely renames transparent behavior may not deserve to exist.
+
+3. Does it threaten microscopicness?
+
+Six should remain small enough to learn essentially in full in one sitting.
+
+If a feature meaningfully increases the conceptual surface of the language, the burden of proof is high.
+
+
+
+51. Human Goal
+
+A new programmer should be able to learn the complete conceptual language rapidly.
+
+The intended experience is not:
+
+
+
+“You now know enough Six to begin.”
+
+It is:
+
+
+
+“You now know Six. Go program.”
+
+From there, the programmer learns algorithms, architecture, libraries, systems, graphics, networking, and problem solving rather than continually discovering additional language machinery.
+
+
+
+52. AI Goal
+
+Six should be small enough that its complete authoritative specification can be supplied directly to an AI coding system.
+
+An AI should not need large amounts of Six training data.
+
+It should be possible to provide:
+
+
+
+
+
+the Six language specification
+
+
+
+the available library/API documentation
+
+
+
+the desired program
+
+and have the system begin producing valid Six immediately.
+
+This creates a useful property:
+
+
+
+Six can fit inside the working context of both the human programmer and the machine programmer.
+
+That is a primary design advantage, not an incidental consequence.
+
+
+
+53. Six in One Sentence
+
+
+
+Six is a microscopic general-purpose language where a small set of transparent structures and transformations replaces a large vocabulary of specialized programming constructs.
+
