@@ -1,0 +1,21 @@
+>> count: [words counts i] >>
+    if
+        i >= size words >> counts
+        else >>
+            word : words[i]
+
+            if
+                counts.has? word >> counts[word] = counts[word] + 1
+                else             >> counts[word] = 1
+            .
+
+            count words counts (i + 1)
+    .
+.
+
+>> frequencies: [source] >>
+    words : source.split " "
+    count words [] 0
+.
+
+print (frequencies "the cat sat on the mat the cat ran")

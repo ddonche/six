@@ -1,0 +1,19 @@
+# Stack (spec §45) — no Stack type needed
+stack : []
+insert stack 10
+insert stack 20
+insert stack 30
+value : stack[$]
+remove stack $
+print stack
+print value
+
+# Queue (spec §46) — no Queue type needed
+queue : []
+insert queue "A"
+insert queue "B"
+insert queue "C"
+first : queue[0]
+remove queue 0
+print queue
+print first

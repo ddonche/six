@@ -370,10 +370,12 @@ impl Parser {
     /// A single argument atom: a primary with postfix index/dot-flow, but no
     /// further application (so `f x.size y` reads as `f(x.size, y)`).
     fn parse_arg(&mut self) -> Result<Arg> {
-        // Splat: `<group>` opens a Group into separate arguments.
+        // Splat: `<group>` opens a Group into separate arguments. The body is
+        // parsed as a tight application so the closing `>` is never mistaken for
+        // a greater-than operator (comparisons are written with spaces).
         if self.check(&Tok::Lt) && !self.peek_tok_at(1).space_before {
             self.advance(); // '<'
-            let expr = self.parse_expr()?;
+            let expr = self.parse_application()?;
             self.expect(&Tok::Gt, "'>' to close a splat argument")?;
             return Ok(Arg::Splat(expr));
         }

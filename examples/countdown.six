@@ -1,0 +1,12 @@
+# Recursion instead of loops (spec §25).
+>> countdown: [n] >>
+    if
+        n <= 0 >> ..
+        else >>
+            print n
+            countdown (n - 1)
+    .
+.
+
+countdown 5
+print "liftoff"
