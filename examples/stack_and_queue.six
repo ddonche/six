@@ -1,19 +1,21 @@
-# Stack (spec §45) — no Stack type needed
-stack : []
-insert stack 10
-insert stack 20
-insert stack 30
-value : stack[$]
-remove stack $
-print stack
-print value
+# A Group is all you need for both a stack and a queue (spec §45-46).
 
-# Queue (spec §46) — no Queue type needed
+# Stack: push with insert, pop from the end ($).
+stack : []
+insert(stack 10)
+insert(stack 20)
+insert(stack 30)
+value : stack[$]
+remove(stack $)
+print(stack)
+print(value)
+
+# Queue: enqueue with insert, dequeue from the front (0).
 queue : []
-insert queue "A"
-insert queue "B"
-insert queue "C"
+insert(queue "A")
+insert(queue "B")
+insert(queue "C")
 first : queue[0]
-remove queue 0
-print queue
-print first
+remove(queue 0)
+print(queue)
+print(first)

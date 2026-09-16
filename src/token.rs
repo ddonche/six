@@ -39,6 +39,15 @@ pub enum Tok {
     Slash,
     Percent,
 
+    // --- postfix operators (hug the operand, no space before) ---
+    Tilde,      // `~`  round
+    Caret,      // `^`  ceiling
+    Underscore, // `_`  floor
+    StarStar,   // `**` square / power
+    SlashSlash, // `//` square root
+    PlusPlus,   // `++` increment
+    MinusMinus, // `--` decrement
+
     // --- logical ---
     And, // `and` / `&&`
     Or,  // `or`  / `||`

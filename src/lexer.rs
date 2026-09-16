@@ -72,12 +72,31 @@ impl Lexer {
                         self.pending_space = true;
                     }
                     Some('#') => {
-                        // comment to end of line
-                        while let Some(c) = self.peek() {
-                            if c == '\n' {
-                                break;
-                            }
+                        if self.peek_at(1) == Some('#') {
+                            // Block comment: `##` ... `##`.
                             self.advance();
+                            self.advance();
+                            loop {
+                                match self.peek() {
+                                    None => break,
+                                    Some('#') if self.peek_at(1) == Some('#') => {
+                                        self.advance();
+                                        self.advance();
+                                        break;
+                                    }
+                                    _ => {
+                                        self.advance();
+                                    }
+                                }
+                            }
+                        } else {
+                            // Line comment to end of line.
+                            while let Some(c) = self.peek() {
+                                if c == '\n' {
+                                    break;
+                                }
+                                self.advance();
+                            }
                         }
                         self.pending_space = true;
                     }
@@ -108,6 +127,10 @@ impl Lexer {
                 }
                 '"' => self.lex_text(line, col)?,
                 '0'..='9' => self.lex_number(line, col)?,
+                // A lone `_` (not starting an identifier) is the floor operator.
+                '_' if !matches!(self.peek_at(1), Some(n) if is_ident_continue(n)) => {
+                    self.lex_symbol(line, col)?
+                }
                 c if is_ident_start(c) => self.lex_ident(line, col),
                 _ => self.lex_symbol(line, col)?,
             }
@@ -234,10 +257,41 @@ impl Lexer {
             '[' => Tok::LBracket,
             ']' => Tok::RBracket,
             '$' => Tok::Dollar,
-            '+' => Tok::Plus,
-            '-' => Tok::Minus,
-            '*' => Tok::Star,
-            '/' => Tok::Slash,
+            '~' => Tok::Tilde,
+            '^' => Tok::Caret,
+            '_' => Tok::Underscore,
+            '+' => {
+                if self.peek() == Some('+') {
+                    self.advance();
+                    Tok::PlusPlus
+                } else {
+                    Tok::Plus
+                }
+            }
+            '-' => {
+                if self.peek() == Some('-') {
+                    self.advance();
+                    Tok::MinusMinus
+                } else {
+                    Tok::Minus
+                }
+            }
+            '*' => {
+                if self.peek() == Some('*') {
+                    self.advance();
+                    Tok::StarStar
+                } else {
+                    Tok::Star
+                }
+            }
+            '/' => {
+                if self.peek() == Some('/') {
+                    self.advance();
+                    Tok::SlashSlash
+                } else {
+                    Tok::Slash
+                }
+            }
             '%' => Tok::Percent,
             ':' => {
                 if self.peek() == Some(':') {

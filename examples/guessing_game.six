@@ -1,27 +1,27 @@
-# Guessing game (spec §44). Reads guesses from input until correct.
->> ask: [answer attempts] >>
-    guess : number (input "Guess a number from 1 to 100: ")
-    check answer attempts guess
+# Guessing game (spec §44) in canonical Six syntax.
+:ask(answer attempts)
+    guess : number(input("Guess a number from 1 to 100: "))
+    check(answer attempts guess)
 .
 
->> check: [answer attempts guess] >>
+:check(answer attempts guess)
     attempts = attempts + 1
 
     if
         guess == answer >>
-            print "Correct!"
-            print ("Attempts: " + text attempts)
+            print("Correct!")
+            print("Attempts: " + text(attempts))
 
         else >>
             message :
                 if
                     guess < answer >> "Too low."
-                    else           >> "Too high."
+                    else >> "Too high."
                 .
 
-            print message
-            ask answer attempts
+            print(message)
+            ask(answer attempts)
     .
 .
 
-ask 42 0
+ask(42 0)

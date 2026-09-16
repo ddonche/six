@@ -152,6 +152,14 @@ impl Interpreter {
                 let v = self.eval(expr, env, false)?.into_value(self)?;
                 Ok(Flow::Value(self.eval_unary(*op, v, *line)?))
             }
+            Expr::Postfix { op, expr, arg, line } => {
+                let v = self.eval(expr, env, false)?.into_value(self)?;
+                let arg_v = match arg {
+                    Some(a) => Some(self.eval(a, env, false)?.into_value(self)?),
+                    None => None,
+                };
+                Ok(Flow::Value(self.eval_postfix(*op, v, arg_v, *line)?))
+            }
             Expr::Binary { op, left, right, line } => {
                 Ok(Flow::Value(self.eval_binary(*op, left, right, env, *line)?))
             }
@@ -314,6 +322,40 @@ impl Interpreter {
                 other => Err(SixError::at(line, format!("'not' needs a boolean, not a {}", other.type_name()))),
             },
         }
+    }
+
+    fn eval_postfix(&self, op: PostOp, v: Value, arg: Option<Value>, line: usize) -> Result<Value> {
+        let n = match v {
+            Value::Number(n) => n,
+            other => return Err(SixError::at(line, format!("this operator needs a number, not a {}", other.type_name()))),
+        };
+        let result = match op {
+            PostOp::Round => match arg {
+                None => n.round(),
+                Some(Value::Number(places)) => {
+                    if places.fract() != 0.0 || places < 0.0 {
+                        return Err(SixError::at(line, "'~' decimal count must be a whole, non-negative number"));
+                    }
+                    let factor = 10f64.powi(places as i32);
+                    (n * factor).round() / factor
+                }
+                Some(other) => return Err(SixError::at(line, format!("'~' decimal count must be a number, not a {}", other.type_name()))),
+            },
+            PostOp::Ceil => n.ceil(),
+            PostOp::Floor => n.floor(),
+            PostOp::Square => n * n,
+            PostOp::Sqrt => {
+                if n < 0.0 {
+                    return Err(SixError::at(line, "cannot take the square root of a negative number"));
+                }
+                n.sqrt()
+            }
+            PostOp::Power => match arg {
+                Some(Value::Number(y)) => n.powf(y),
+                _ => return Err(SixError::at(line, "'**' power needs a number exponent")),
+            },
+        };
+        Ok(Value::Number(result))
     }
 
     fn eval_binary(&mut self, op: BinOp, left: &Expr, right: &Expr, env: &Env, line: usize) -> Result<Value> {

@@ -62,6 +62,8 @@ pub enum Expr {
     /// `>>` / dot-flow is desugared to `args[0]`.
     Call { callee: Box<Expr>, args: Vec<Arg>, line: usize },
     Unary { op: UnOp, expr: Box<Expr>, line: usize },
+    /// A numeric postfix operator: `x~`, `x~2`, `x^`, `x_`, `x**`, `x**y`, `x//`.
+    Postfix { op: PostOp, expr: Box<Expr>, arg: Option<Box<Expr>>, line: usize },
     Binary { op: BinOp, left: Box<Expr>, right: Box<Expr>, line: usize },
     /// A conditional. `any == true` means "run every matching branch".
     If { any: bool, arms: Vec<Arm>, else_body: Option<Vec<Stmt>>, line: usize },
@@ -75,6 +77,7 @@ impl Expr {
             | Expr::Index { line, .. }
             | Expr::Call { line, .. }
             | Expr::Unary { line, .. }
+            | Expr::Postfix { line, .. }
             | Expr::Binary { line, .. }
             | Expr::If { line, .. } => *line,
             _ => 0,
@@ -100,6 +103,17 @@ pub struct Arm {
 pub enum UnOp {
     Neg,
     Not,
+}
+
+/// Numeric postfix operators.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PostOp {
+    Round,  // `~` (round to integer) or `~n` (round to n decimals)
+    Ceil,   // `^`
+    Floor,  // `_`
+    Square, // `**` with no operand
+    Power,  // `**y`
+    Sqrt,   // `//`
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

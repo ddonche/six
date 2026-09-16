@@ -1,10 +1,45 @@
-# Higher-order operations (spec §39-42) are in the prelude already;
-# here we exercise them exactly as the spec defines their use.
->> dbl: [x] >> x * 2
->> even?: [x] >> x % 2 == 0
->> add: [a b] >> a + b
+# map / filter / fold / find are not built in — you write them in Six.
+# (spec §39-42, transcribed into the canonical call syntax.)
 
-print (map [1 2 3 4 5] dbl)
-print (filter [1 2 3 4 5 6 7 8] even?)
-print (fold [1 2 3 4 5] 0 add)
-print (find [1 3 5 8 9] even?)
+:fold(list init f i)
+    if
+        i >= size(list) >> init
+        else >> fold(list f(init list[i]) f (i + 1))
+    .
+.
+
+:map(list f i result)
+    if
+        i >= size(list) >> result
+        else >>
+            insert(result f(list[i]))
+            map(list f (i + 1) result)
+    .
+.
+
+:filter(list f i result)
+    if
+        i >= size(list) >> result
+        else >>
+            if
+                f(list[i]) >> insert(result list[i])
+            .
+            filter(list f (i + 1) result)
+    .
+.
+
+:double(x)
+    x * 2
+.
+
+:even?(x)
+    x % 2 == 0
+.
+
+:add(a b)
+    a + b
+.
+
+print(map([1 2 3 4 5] double 0 []))
+print(filter([1 2 3 4 5 6 7 8] even? 0 []))
+print(fold([1 2 3 4 5] 0 add 0))
