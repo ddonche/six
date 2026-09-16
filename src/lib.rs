@@ -13,8 +13,12 @@ pub mod interp;
 pub mod lexer;
 pub mod parser;
 pub mod prelude;
+pub mod repl;
 pub mod token;
 pub mod value;
+
+/// The authoritative language specification, embedded in the binary.
+pub const SPEC: &str = include_str!("../docs/six_spec.txt");
 
 pub use error::{Result, SixError};
 pub use interp::Interpreter;

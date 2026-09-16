@@ -26,12 +26,15 @@ enum Flow {
 pub struct Interpreter {
     pub global: Env,
     out: Box<dyn Write>,
+    /// In REPL mode, re-binding a name at the top level replaces it instead of
+    /// erroring, so a function can be redefined interactively.
+    repl: bool,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         let global = Scope::new_global();
-        let mut interp = Interpreter { global: global.clone(), out: Box::new(io::stdout()) };
+        let mut interp = Interpreter { global: global.clone(), out: Box::new(io::stdout()), repl: false };
         interp.install_builtins();
         interp
     }
@@ -40,9 +43,14 @@ impl Interpreter {
     /// used by the test suite.
     pub fn with_writer(out: Box<dyn Write>) -> Self {
         let global = Scope::new_global();
-        let mut interp = Interpreter { global: global.clone(), out };
+        let mut interp = Interpreter { global: global.clone(), out, repl: false };
         interp.install_builtins();
         interp
+    }
+
+    /// Enable REPL semantics (top-level redefinition).
+    pub fn set_repl(&mut self, repl: bool) {
+        self.repl = repl;
     }
 
     fn install_builtins(&mut self) {
@@ -118,8 +126,9 @@ impl Interpreter {
     }
 
     fn bind_new(&self, env: &Env, name: &str, value: Value, immutable: bool, line: usize) -> Result<()> {
+        let repl_global = self.repl && Rc::ptr_eq(env, &self.global);
         let mut scope = env.borrow_mut();
-        if scope.vars.contains_key(name) {
+        if scope.vars.contains_key(name) && !repl_global {
             return Err(SixError::at(line, format!("'{}' is already defined in this scope", name)));
         }
         scope.vars.insert(name.to_string(), Binding { value, immutable });

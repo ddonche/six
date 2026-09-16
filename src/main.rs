@@ -1,10 +1,13 @@
 //! The `six` command-line runner.
 //!
 //! Usage:
-//!   six <file.six>     run a program
-//!   six run <file.six> run a program
-//!   six --version      print the version
-//!   six --help         print usage
+//!   six                 start the interactive REPL
+//!   six <file.six>      run a program
+//!   six run <file.six>  run a program
+//!   six repl            start the interactive REPL
+//!   six spec            print the language specification (bundled in the binary)
+//!   six --version       print the version
+//!   six --help          print usage
 
 use std::process::ExitCode;
 
@@ -15,12 +18,19 @@ fn main() -> ExitCode {
     let rest = &args[1..];
 
     match rest.first().map(String::as_str) {
-        None | Some("--help") | Some("-h") => {
+        // No arguments: drop into the REPL.
+        None => ExitCode::from(six::repl::run() as u8),
+        Some("--help") | Some("-h") => {
             print_usage();
             ExitCode::SUCCESS
         }
         Some("--version") | Some("-V") => {
             println!("six {}", env!("CARGO_PKG_VERSION"));
+            ExitCode::SUCCESS
+        }
+        Some("repl") => ExitCode::from(six::repl::run() as u8),
+        Some("spec") => {
+            print!("{}", six::SPEC);
             ExitCode::SUCCESS
         }
         Some("run") => match rest.get(1) {
@@ -52,10 +62,6 @@ fn run_file(path: &str) -> ExitCode {
     };
 
     let mut interp = Interpreter::new();
-    if let Err(e) = interp.load_prelude() {
-        eprintln!("six: internal prelude error: {}", e);
-        return ExitCode::FAILURE;
-    }
     match interp.run(&program) {
         Ok(_) => ExitCode::SUCCESS,
         Err(e) => {
@@ -69,8 +75,11 @@ fn print_usage() {
     println!("Six v{} — a microscopic general-purpose language", env!("CARGO_PKG_VERSION"));
     println!();
     println!("Usage:");
+    println!("  six                  start the interactive REPL");
     println!("  six <file.six>       run a program");
     println!("  six run <file.six>   run a program");
+    println!("  six repl             start the interactive REPL");
+    println!("  six spec             print the language specification");
     println!("  six --version        print the version");
     println!("  six --help           print this help");
 }
