@@ -71,7 +71,6 @@ fn builtin_size(args: Vec<Value>, line: usize) -> Result<Value> {
     let n = match &args[0] {
         Value::Group(g) => g.items.borrow().len(),
         Value::Text(s) => s.chars().count(),
-        Value::Module(scope) => scope.borrow().vars.len(),
         Value::Empty => 0,
         other => {
             return Err(SixError::at(line, format!("size is not supported for a {}", other.type_name())));
@@ -83,23 +82,11 @@ fn builtin_size(args: Vec<Value>, line: usize) -> Result<Value> {
 fn builtin_has(args: Vec<Value>, line: usize) -> Result<Value> {
     arity("has?", &args, 2, 2, line)?;
     let key = match &args[1] {
-        Value::Text(k) => k.clone(),
+        Value::Text(k) => k,
         other => return Err(SixError::at(line, format!("has? needs a text key, not a {}", other.type_name()))),
     };
-    // A module answers existence over its top-level bindings.
-    if let Value::Module(scope) = &args[0] {
-        return Ok(Value::Bool(scope.borrow().vars.contains_key(&key)));
-    }
     let g = as_group(&args[0], line, "has?")?;
-    let found = g.items.borrow().iter().any(|item| {
-        if let Value::Group(pair) = item {
-            let pair = pair.items.borrow();
-            pair.len() == 2 && matches!(&pair[0], Value::Text(k) if k == &key)
-        } else {
-            false
-        }
-    });
-    Ok(Value::Bool(found))
+    Ok(Value::Bool(g.find_key(key).is_some()))
 }
 
 fn builtin_split(args: Vec<Value>, line: usize) -> Result<Value> {

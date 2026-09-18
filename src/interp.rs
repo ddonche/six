@@ -56,11 +56,12 @@ impl Interpreter {
 
     fn build(out: Box<dyn Write>) -> Self {
         let builtins = Scope::new_global();
-        for name in BUILTINS {
-            builtins
-                .borrow_mut()
-                .vars
-                .insert(name.to_string(), Binding { value: Value::Builtin(name), immutable: true });
+        {
+            let store = builtins.borrow().store();
+            let mut items = store.items.borrow_mut();
+            for name in BUILTINS {
+                items.push(Value::new_group(vec![Value::Text(name.to_string()), Value::Builtin(name)]));
+            }
         }
         let global = Scope::child(&builtins);
         Interpreter {
@@ -118,7 +119,7 @@ impl Interpreter {
                         g.immutable.set(true);
                     }
                 }
-                self.bind_new(env, name, v, *immutable, *line)?;
+                self.bind_new(env, name, v, *line)?;
                 Ok(Flow::Value(Value::Empty))
             }
             Stmt::Assign { target, value, line } => {
@@ -126,15 +127,14 @@ impl Interpreter {
                 self.assign(target, v, env, *line)?;
                 Ok(Flow::Value(Value::Empty))
             }
-            Stmt::Func { def, immutable, line } => {
+            Stmt::Func { def, immutable: _, line } => {
                 let closure = Value::Func(Rc::new(Closure { def: def.clone(), env: env.clone() }));
-                self.bind_new(env, &def.name, closure, *immutable, *line)?;
+                self.bind_new(env, &def.name, closure, *line)?;
                 Ok(Flow::Value(Value::Empty))
             }
             Stmt::Import { name, line } => {
                 let module = self.import_module(name, *line)?;
-                let immutable = crate::parser::is_immutable_name(name);
-                self.bind_new(env, name, module, immutable, *line)?;
+                self.bind_new(env, name, module, *line)?;
                 Ok(Flow::Value(Value::Empty))
             }
             Stmt::Expr(e) => self.eval(e, env, tail),
@@ -143,8 +143,11 @@ impl Interpreter {
 
     /// Resolve, load (once), and return the program Group for `name.six`.
     ///
-    /// The returned [`Value::Module`] wraps the module's live scope, so keyed
-    /// access on it reads and writes the module's top-level bindings directly.
+    /// The value returned is an ordinary [`Value::Group`]: the module's
+    /// top-level scope stores its bindings in a `GroupRef`, and that same
+    /// `GroupRef` is what we hand out. After this returns, nothing in the
+    /// evaluator can tell the Group came from another file — `@` is special,
+    /// the value it produces is not.
     fn import_module(&mut self, name: &str, line: usize) -> Result<Value> {
         let path = self.base_dir.join(format!("{}.six", name));
         let canonical = std::fs::canonicalize(&path).map_err(|_| {
@@ -156,10 +159,10 @@ impl Interpreter {
             return Ok(m.clone());
         }
 
-        // The module's top-level scope IS its program Group. Cache it before
-        // evaluating so cyclic imports resolve to the in-progress module.
+        // The module's top-level scope store IS its program Group. Cache it
+        // before evaluating so cyclic imports resolve to the in-progress module.
         let mod_scope = Scope::child(&self.builtins);
-        let module_val = Value::Module(mod_scope.clone());
+        let module_val = Value::Group(mod_scope.borrow().store());
         self.modules.insert(canonical.clone(), module_val.clone());
 
         let source = std::fs::read_to_string(&canonical)
@@ -182,13 +185,19 @@ impl Interpreter {
         Ok(())
     }
 
-    fn bind_new(&self, env: &Env, name: &str, value: Value, immutable: bool, line: usize) -> Result<()> {
+    /// Create a new binding in this scope's store (an ordinary keyed Group).
+    /// Redeclaration is an error, except that REPL mode replaces at top level.
+    fn bind_new(&self, env: &Env, name: &str, value: Value, line: usize) -> Result<()> {
         let repl_global = self.repl && Rc::ptr_eq(env, &self.global);
-        let mut scope = env.borrow_mut();
-        if scope.vars.contains_key(name) && !repl_global {
+        let store = env.borrow().store();
+        if let Some(idx) = store.find_key(name) {
+            if repl_global {
+                set_pair_value(&store, idx, value);
+                return Ok(());
+            }
             return Err(SixError::at(line, format!("'{}' is already defined in this scope", name)));
         }
-        scope.vars.insert(name.to_string(), Binding { value, immutable });
+        store.items.borrow_mut().push(Value::new_group(vec![Value::Text(name.to_string()), value]));
         Ok(())
     }
 
@@ -239,8 +248,9 @@ impl Interpreter {
     fn lookup(&self, env: &Env, name: &str, line: usize) -> Result<Value> {
         let mut cur = Some(env.clone());
         while let Some(scope) = cur {
-            if let Some(binding) = scope.borrow().vars.get(name) {
-                return Ok(binding.value.clone());
+            let store = scope.borrow().store();
+            if let Some(idx) = store.find_key(name) {
+                return Ok(pair_value(&store, idx));
             }
             cur = scope.borrow().parent.clone();
         }
@@ -296,12 +306,10 @@ impl Interpreter {
                     }
                     let call_env = Scope::child(&closure.env);
                     {
-                        let mut scope = call_env.borrow_mut();
+                        let store = call_env.borrow().store();
+                        let mut items = store.items.borrow_mut();
                         for (param, value) in def.params.iter().zip(args.into_iter()) {
-                            scope.vars.insert(
-                                param.clone(),
-                                Binding { value, immutable: crate::parser::is_immutable_name(param) },
-                            );
+                            items.push(Value::new_group(vec![Value::Text(param.clone()), value]));
                         }
                     }
                     match self.exec_body(&def.body, &call_env, true)? {
@@ -502,21 +510,10 @@ impl Interpreter {
                         let i = resolve_pos(index, items.len(), line, "Group")?;
                         Ok(items[i].clone())
                     }
-                    Value::Text(key) => {
-                        for item in items.iter() {
-                            if let Value::Group(pair) = item {
-                                let pair = pair.items.borrow();
-                                if pair.len() == 2 {
-                                    if let Value::Text(k) = &pair[0] {
-                                        if k == key {
-                                            return Ok(pair[1].clone());
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Err(SixError::at(line, format!("no key \"{}\" in Group", key)))
-                    }
+                    Value::Text(key) => match g.find_key(key) {
+                        Some(idx) => Ok(pair_value(g, idx)),
+                        None => Err(SixError::at(line, format!("no key \"{}\" in Group", key))),
+                    },
                     other => Err(SixError::at(line, format!("cannot index a Group with a {}", other.type_name()))),
                 }
             }
@@ -531,16 +528,6 @@ impl Interpreter {
                     other => Err(SixError::at(line, format!("cannot index text with a {}", other.type_name()))),
                 }
             }
-            Value::Module(scope) => match index {
-                Value::Text(key) => match scope.borrow().vars.get(key) {
-                    Some(binding) => Ok(binding.value.clone()),
-                    None => Err(SixError::at(line, format!("module has no binding \"{}\"", key))),
-                },
-                other => Err(SixError::at(
-                    line,
-                    format!("a module is keyed by name; index it with text, not a {}", other.type_name()),
-                )),
-            },
             other => Err(SixError::at(line, format!("cannot index a {}", other.type_name()))),
         }
     }
@@ -558,18 +545,25 @@ impl Interpreter {
         }
     }
 
+    /// Rebind an existing name (`=`). This is the *binding* operation, so it
+    /// enforces the name-case immutability rule (uppercase names cannot be
+    /// reassigned) — distinct from ordinary keyed Group writes, which do not.
     fn rebind(&self, env: &Env, name: &str, value: Value, line: usize) -> Result<()> {
         let mut cur = Some(env.clone());
         while let Some(scope) = cur {
-            let mut s = scope.borrow_mut();
-            if let Some(binding) = s.vars.get_mut(name) {
-                if binding.immutable {
+            let is_builtins = Rc::ptr_eq(&scope, &self.builtins);
+            let store = scope.borrow().store();
+            if let Some(idx) = store.find_key(name) {
+                if is_builtins {
+                    return Err(SixError::at(line, format!("cannot reassign builtin '{}'", name)));
+                }
+                if crate::parser::is_immutable_name(name) {
                     return Err(SixError::at(line, format!("cannot reassign immutable name '{}'", name)));
                 }
-                binding.value = value;
+                set_pair_value(&store, idx, value);
                 return Ok(());
             }
-            cur = s.parent.clone();
+            cur = scope.borrow().parent.clone();
         }
         Err(SixError::at(line, format!("cannot assign to undefined name '{}'", name)))
     }
@@ -589,29 +583,6 @@ impl Interpreter {
                 let new_text = self.text_set(&base_v, &idx, value, line)?;
                 self.assign(base, new_text, env, line)
             }
-            Value::Module(scope) => {
-                let key = match &idx {
-                    Value::Text(k) => k.clone(),
-                    other => {
-                        return Err(SixError::at(line, format!("a module is keyed by name, not a {}", other.type_name())));
-                    }
-                };
-                let mut s = scope.borrow_mut();
-                match s.vars.get_mut(&key) {
-                    Some(binding) => {
-                        if binding.immutable {
-                            return Err(SixError::at(line, format!("cannot reassign immutable module binding '{}'", key)));
-                        }
-                        binding.value = value;
-                    }
-                    None => {
-                        // Missing keyed write creates the binding (spec §13).
-                        let immutable = crate::parser::is_immutable_name(&key);
-                        s.vars.insert(key, Binding { value, immutable });
-                    }
-                }
-                Ok(())
-            }
             other => Err(SixError::at(line, format!("cannot index-assign into a {}", other.type_name()))),
         }
     }
@@ -625,21 +596,17 @@ impl Interpreter {
                 Ok(())
             }
             Value::Text(key) => {
-                for item in items.iter() {
-                    if let Value::Group(pair) = item {
-                        let mut pair = pair.items.borrow_mut();
-                        if pair.len() == 2 {
-                            if let Value::Text(k) = &pair[0] {
-                                if k == key {
-                                    pair[1] = value;
-                                    return Ok(());
-                                }
-                            }
-                        }
+                // Keyed Group write. This is *not* a binding operation, so it
+                // performs no name-case immutability check — `group["MAX"] = v`
+                // is legal even when the Group is another program's environment.
+                if let Some(pos) = items.iter().position(|it| pair_key_matches(it, key)) {
+                    if let Value::Group(pair) = &items[pos] {
+                        pair.items.borrow_mut()[1] = value;
                     }
+                } else {
+                    // Missing keyed write creates the key (spec §13).
+                    items.push(Value::new_group(vec![Value::Text(key.clone()), value]));
                 }
-                // Missing keyed write creates the key (spec §13).
-                items.push(Value::new_group(vec![Value::Text(key.clone()), value]));
                 Ok(())
             }
             other => Err(SixError::at(line, format!("cannot index-assign a Group with a {}", other.type_name()))),
@@ -693,6 +660,23 @@ pub const BUILTINS: &[&str] = &[
     "print", "input", "size", "has?", "split", "number", "text", "insert", "remove",
 ];
 
+/// The value of the `["key" value]` pair at `idx` in a store/Group (clone of
+/// its second member). Scope stores are ordinary keyed Groups, so this serves
+/// both name resolution and keyed Group reads.
+fn pair_value(store: &GroupRef, idx: usize) -> Value {
+    match &store.items.borrow()[idx] {
+        Value::Group(pair) => pair.items.borrow()[1].clone(),
+        _ => Value::Empty,
+    }
+}
+
+/// Replace the value of the pair at `idx`.
+fn set_pair_value(store: &GroupRef, idx: usize, value: Value) {
+    if let Value::Group(pair) = &store.items.borrow()[idx] {
+        pair.items.borrow_mut()[1] = value;
+    }
+}
+
 fn arith(l: Value, r: Value, line: usize, op: &str, f: impl Fn(f64, f64) -> f64) -> Result<Value> {
     match (l, r) {
         (Value::Number(a), Value::Number(b)) => Ok(Value::Number(f(a, b))),
@@ -726,7 +710,6 @@ fn values_equal(a: &Value, b: &Value) -> bool {
         (Value::Bool(x), Value::Bool(y)) => x == y,
         (Value::Empty, Value::Empty) => true,
         (Value::Group(x), Value::Group(y)) => Rc::ptr_eq(x, y),
-        (Value::Module(x), Value::Module(y)) => Rc::ptr_eq(x, y),
         _ => false,
     }
 }

@@ -5,9 +5,15 @@
 //! `clone` copies them), while a Group is reference-semantic — cloning a
 //! `Value::Group` clones only the `Rc`, so both names share one Group. `::`
 //! performs the deep copy that breaks that sharing.
+//!
+//! A scope's binding store is itself a `GroupRef` — an ordinary keyed Group of
+//! `["name" value]` pairs. That is what makes `@` imports work with no new
+//! value kind: a module is exposed by handing out its program scope's store as
+//! an ordinary `Value::Group`. The specialness of `@` lives entirely in the
+//! loader and in the binding *rules* the scope layer applies (name-case
+//! immutability, redeclaration) — never in the value it produces.
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::ast::FuncDef;
@@ -21,6 +27,25 @@ pub struct GroupData {
 }
 
 pub type GroupRef = Rc<GroupData>;
+
+impl GroupData {
+    /// Index of the first direct member that is a two-member `["key" _]` pair
+    /// matching `key`. This one scan underlies both keyed Group access and
+    /// scope name resolution — a scope store is just such a Group.
+    pub fn find_key(&self, key: &str) -> Option<usize> {
+        self.items.borrow().iter().position(|item| pair_key_matches(item, key))
+    }
+}
+
+/// True when `item` is a two-member Group whose first member is text == `key`.
+pub fn pair_key_matches(item: &Value, key: &str) -> bool {
+    if let Value::Group(pair) = item {
+        let p = pair.items.borrow();
+        p.len() == 2 && matches!(&p[0], Value::Text(k) if k == key)
+    } else {
+        false
+    }
+}
 
 /// A closure: the static definition plus the environment it was defined in.
 #[derive(Debug)]
@@ -43,18 +68,11 @@ pub enum Value {
     Group(GroupRef),
     Func(Rc<Closure>),
     Builtin(&'static str),
-    /// An imported module. It wraps the module file's *live* top-level scope —
-    /// keyed access (`hero["health"]`) reads and writes that scope directly, so
-    /// the program Group and the module environment are one binding store.
-    Module(Env),
 }
 
 impl Value {
     pub fn new_group(items: Vec<Value>) -> Value {
-        Value::Group(Rc::new(GroupData {
-            items: RefCell::new(items),
-            immutable: Cell::new(false),
-        }))
+        Value::Group(new_group_ref(items))
     }
 
     /// The short type name used in error messages.
@@ -68,7 +86,6 @@ impl Value {
             Value::Group(_) => "Group",
             Value::Func(_) => "function",
             Value::Builtin(_) => "function",
-            Value::Module(_) => "module",
         }
     }
 
@@ -77,22 +94,11 @@ impl Value {
     }
 
     /// Recursively deep-copy Groups (used by `::`). Simple values copy directly.
+    /// An imported module is an ordinary Group, so it deep-copies like one.
     pub fn deep_copy(&self) -> Value {
         match self {
             Value::Group(g) => {
                 let items = g.items.borrow().iter().map(|v| v.deep_copy()).collect();
-                Value::new_group(items)
-            }
-            // Deep-copying a module snapshots its bindings into an ordinary
-            // Group of key/value pairs (import itself never snapshots).
-            Value::Module(scope) => {
-                let mut pairs: Vec<(String, Value)> =
-                    scope.borrow().vars.iter().map(|(k, b)| (k.clone(), b.value.deep_copy())).collect();
-                pairs.sort_by(|a, b| a.0.cmp(&b.0));
-                let items = pairs
-                    .into_iter()
-                    .map(|(k, v)| Value::new_group(vec![Value::Text(k), v]))
-                    .collect();
                 Value::new_group(items)
             }
             other => other.clone(),
@@ -100,29 +106,35 @@ impl Value {
     }
 }
 
+/// Build a fresh Group backing store.
+pub fn new_group_ref(items: Vec<Value>) -> GroupRef {
+    Rc::new(GroupData { items: RefCell::new(items), immutable: Cell::new(false) })
+}
+
 // --- environment ------------------------------------------------------------
 
 pub type Env = Rc<RefCell<Scope>>;
 
+/// A lexical scope. Its `store` is an ordinary keyed Group of `["name" value]`
+/// pairs — the very same representation a program exposes when imported.
 #[derive(Debug)]
-pub struct Binding {
-    pub value: Value,
-    pub immutable: bool,
-}
-
-#[derive(Debug, Default)]
 pub struct Scope {
-    pub vars: HashMap<String, Binding>,
+    pub store: GroupRef,
     pub parent: Option<Env>,
 }
 
 impl Scope {
     pub fn new_global() -> Env {
-        Rc::new(RefCell::new(Scope { vars: HashMap::new(), parent: None }))
+        Rc::new(RefCell::new(Scope { store: new_group_ref(Vec::new()), parent: None }))
     }
 
     pub fn child(parent: &Env) -> Env {
-        Rc::new(RefCell::new(Scope { vars: HashMap::new(), parent: Some(parent.clone()) }))
+        Rc::new(RefCell::new(Scope { store: new_group_ref(Vec::new()), parent: Some(parent.clone()) }))
+    }
+
+    /// The scope's binding store as a Group value (this is what `@` hands out).
+    pub fn store(&self) -> GroupRef {
+        self.store.clone()
     }
 }
 
@@ -137,7 +149,6 @@ impl std::fmt::Debug for Value {
             Value::Group(_) => write!(f, "Group(..)"),
             Value::Func(_) => write!(f, "Func(..)"),
             Value::Builtin(n) => write!(f, "Builtin({})", n),
-            Value::Module(_) => write!(f, "Module(..)"),
         }
     }
 }

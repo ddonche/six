@@ -138,11 +138,103 @@ fn missing_module_errors() {
     assert!(err.message.contains("cannot import 'ghost'"), "got: {}", err.message);
 }
 
+// --- "@ is special; what it produces is not" --------------------------------
+//
+// After import, a module is an ordinary Group. These tests prove that every
+// ordinary Group operation works on it, with no module-specific behavior.
+
 #[test]
-fn immutable_module_binding_cannot_be_rebound() {
+fn module_is_an_ordinary_group_positional_indexing() {
+    // (2) Positional indexing works exactly as on any Group: index 0 is the
+    // first ["name" value] pair, which is itself a two-member Group.
+    let s = Sandbox::new();
+    s.write("m.six", "name : \"Conan\"\nhealth : 100\n");
+    s.write(
+        "main.six",
+        "@m\nfirst : m[0]\nprint(first[0])\nprint(first[1])\nprint(size(m[$]))",
+    );
+    assert_eq!(s.run("main.six"), "name\nConan\n2\n");
+}
+
+#[test]
+fn module_opens_with_splat() {
+    // (3) <module> opens the Group into separate arguments — here, its pairs.
+    let s = Sandbox::new();
+    s.write("m.six", "a : 1\nb : 2\n");
+    s.write(
+        "main.six",
+        ":pair-key(p q)\n    p[0] + \" and \" + q[0]\n.\n@m\nprint(pair-key(<m>))",
+    );
+    assert_eq!(s.run("main.six"), "a and b\n");
+}
+
+#[test]
+fn module_supports_insert_remove_size_has() {
+    // (4) insert / remove / size / has? all work through ordinary Group behavior.
+    let s = Sandbox::new();
+    s.write("m.six", "health : 100\n");
+    s.write(
+        "main.six",
+        concat!(
+            "@m\n",
+            "print(size(m))\n",
+            "print(has?(m \"health\"))\n",
+            "insert(m [\"mana\" 50])\n",   // append a new pair like any Group
+            "print(size(m))\n",
+            "print(m[\"mana\"])\n",
+            "remove(m 0)\n",               // drop the first pair positionally
+            "print(has?(m \"health\"))\n",
+        ),
+    );
+    assert_eq!(s.run("main.six"), "1\ntrue\n2\n50\nfalse\n");
+}
+
+#[test]
+fn module_deep_copy_is_ordinary() {
+    // (5) :: uses ordinary Group deep-copy: the copy is independent.
+    let s = Sandbox::new();
+    s.write("m.six", "health : 100\n");
+    s.write(
+        "main.six",
+        "@m\nsnapshot :: m\nm[\"health\"] = 5\nprint(snapshot[\"health\"])\nprint(m[\"health\"])",
+    );
+    assert_eq!(s.run("main.six"), "100\n5\n");
+}
+
+#[test]
+fn module_equality_is_reference_identity() {
+    // (6) == uses ordinary Group reference/identity behavior.
+    let s = Sandbox::new();
+    s.write("m.six", "x : 1\n");
+    s.write(
+        "main.six",
+        "@m\nalias : m\ncopy :: m\nprint(alias == m)\nprint(copy == m)",
+    );
+    assert_eq!(s.run("main.six"), "true\nfalse\n");
+}
+
+#[test]
+fn external_uppercase_keyed_write_is_legal() {
+    // (7) hero["UPPERCASE"] = value is ordinary keyed mutation and is legal,
+    // even though the Group is another program's top-level environment.
     let s = Sandbox::new();
     s.write("consts.six", "MAX : 100\n");
-    s.write("main.six", "@consts\nconsts[\"MAX\"] = 5");
+    s.write("main.six", "@consts\nconsts[\"MAX\"] = 5\nprint(consts[\"MAX\"])");
+    assert_eq!(s.run("main.six"), "5\n");
+}
+
+#[test]
+fn internal_uppercase_rebind_is_illegal() {
+    // (8) Internal UPPERCASE = value remains illegal binding rebinding.
+    let s = Sandbox::new();
+    s.write("consts.six", "MAX : 100\n\n:bump()\n    MAX = 5\n.\n");
+    s.write("main.six", "@consts\nconsts[\"bump\"]()");
     let err = run_file_capture(&s.dir.join("main.six")).unwrap_err();
     assert!(err.message.contains("immutable"), "got: {}", err.message);
+}
+
+#[test]
+fn builtins_are_read_only() {
+    // The builtins scope is read-only runtime infrastructure.
+    assert!(six::run("print = 5").unwrap_err().message.contains("builtin"));
 }
