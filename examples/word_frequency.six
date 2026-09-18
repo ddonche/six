@@ -1,4 +1,24 @@
-# Word frequency counter (spec §43) in canonical Six syntax.
+# Word frequency counter (spec §43).
+#
+# `split` is not a builtin — it is ordinary Six. Here is a compact split on a
+# single-character separator, written with the same tools any program has.
+:split(str sep)
+    _split(str sep [] "" 0)
+.
+
+:_split(str sep result current i)
+    if
+        i >= size(str) >>
+            insert(result current)
+            result
+        str[i] == sep >>
+            insert(result current)
+            _split(str sep result "" (i + 1))
+        else >>
+            _split(str sep result (current + str[i]) (i + 1))
+    .
+.
+
 :count(words counts i)
     if
         i >= size(words) >> counts

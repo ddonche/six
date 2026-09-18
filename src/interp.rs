@@ -655,9 +655,20 @@ impl Flow {
 
 // --- free helpers -----------------------------------------------------------
 
-/// The builtins registered as ordinary global names.
+/// The names the runtime provides directly.
+///
+/// The doctrine: a *builtin* provides a capability Six cannot create for itself
+/// (I/O, the size of a value, the fundamental Group mutations, keyed
+/// existence). A *conversion* moves between Six's value categories. Everything
+/// derivable from those — `map`, `filter`, `fold`, `find`, `split`, … — is
+/// ordinary Six, written by the programmer, never primitive.
 pub const BUILTINS: &[&str] = &[
-    "print", "input", "size", "has?", "split", "number", "text", "insert", "remove",
+    // The six capability builtins.
+    "print", "input", "size", "insert", "remove", "has?",
+    // Conversions between value categories (associated with the value types,
+    // not capabilities — the shared callable machinery is an implementation
+    // detail of the language model).
+    "number", "text",
 ];
 
 /// The value of the `["key" value]` pair at `idx` in a store/Group (clone of

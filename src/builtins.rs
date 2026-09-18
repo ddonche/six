@@ -19,7 +19,6 @@ pub fn dispatch(interp: &mut Interpreter, name: &str, args: Vec<Value>, line: us
         "input" => builtin_input(interp, args, line),
         "size" => builtin_size(args, line),
         "has?" => builtin_has(args, line),
-        "split" => builtin_split(args, line),
         "number" => builtin_number(args, line),
         "text" => builtin_text(args, line),
         "insert" => builtin_insert(args, line),
@@ -87,24 +86,6 @@ fn builtin_has(args: Vec<Value>, line: usize) -> Result<Value> {
     };
     let g = as_group(&args[0], line, "has?")?;
     Ok(Value::Bool(g.find_key(key).is_some()))
-}
-
-fn builtin_split(args: Vec<Value>, line: usize) -> Result<Value> {
-    arity("split", &args, 2, 2, line)?;
-    let text = match &args[0] {
-        Value::Text(s) => s,
-        other => return Err(SixError::at(line, format!("split needs text, not a {}", other.type_name()))),
-    };
-    let delim = match &args[1] {
-        Value::Text(d) => d,
-        other => return Err(SixError::at(line, format!("split needs a text delimiter, not a {}", other.type_name()))),
-    };
-    let pieces: Vec<Value> = if delim.is_empty() {
-        text.chars().map(|c| Value::Text(c.to_string())).collect()
-    } else {
-        text.split(delim.as_str()).map(|p| Value::Text(p.to_string())).collect()
-    };
-    Ok(Value::new_group(pieces))
 }
 
 fn builtin_number(args: Vec<Value>, line: usize) -> Result<Value> {

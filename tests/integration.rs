@@ -316,7 +316,23 @@ fn block_and_line_comments() {
 
 #[test]
 fn word_frequency_counter() {
+    // `split` is userland Six, not a builtin — the program defines its own.
     let src = concat!(
+        ":split(str sep)\n",
+        "    _split(str sep [] \"\" 0)\n",
+        ".\n",
+        ":_split(str sep result current i)\n",
+        "    if\n",
+        "        i >= size(str) >>\n",
+        "            insert(result current)\n",
+        "            result\n",
+        "        str[i] == sep >>\n",
+        "            insert(result current)\n",
+        "            _split(str sep result \"\" (i + 1))\n",
+        "        else >>\n",
+        "            _split(str sep result (current + str[i]) (i + 1))\n",
+        "    .\n",
+        ".\n",
         ":count(words counts i)\n",
         "    if\n",
         "        i >= size(words) >> counts\n",
@@ -336,4 +352,10 @@ fn word_frequency_counter() {
         "print(frequencies(\"a b a c b a\"))\n",
     );
     assert_eq!(out(src), "[[\"a\" 3] [\"b\" 2] [\"c\" 1]]\n");
+}
+
+#[test]
+fn split_is_userland_not_a_builtin() {
+    // There is no `split` in the runtime; calling it undefined is an error.
+    assert!(err("print(split(\"a b\" \" \"))").contains("undefined name 'split'"));
 }

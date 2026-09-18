@@ -1,0 +1,55 @@
+# text.six — a Six standard-library module (the first).
+#
+# Nothing here is part of the Six language. Every operation is ordinary Six,
+# built from size, text indexing, +, Groups, insert, recursion, and
+# conditionals. The module is itself the proof that `split` is not primitive.
+#
+# There is no automatic import. To use it, place a copy beside your program and
+#   @text
+#   parts : text["split"](line " ")
+# (note: importing this as `text` shadows the `text(x)` conversion in that
+#  file — see the module naming note in the project docs.)
+
+# Does `delim` occur in `str` starting exactly at position `pos`?
+:matches-at(str pos delim j)
+    if
+        j >= size(delim) >> true
+        pos + j >= size(str) >> false
+        str[pos + j] == delim[j] >> matches-at(str pos delim (j + 1))
+        else >> false
+    .
+.
+
+# Split `str` on every occurrence of `delim`, returning a Group of text pieces.
+# Empty pieces between adjacent or edge delimiters are preserved. An empty
+# delimiter splits into individual characters.
+:split(str delim)
+    if
+        size(delim) == 0 >> _chars(str [] 0)
+        else >> _split(str delim [] "" 0)
+    .
+.
+
+:_split(str delim result current i)
+    if
+        i >= size(str) >>
+            insert(result current)
+            result
+
+        matches-at(str i delim 0) >>
+            insert(result current)
+            _split(str delim result "" (i + size(delim)))
+
+        else >>
+            _split(str delim result (current + str[i]) (i + 1))
+    .
+.
+
+:_chars(str result i)
+    if
+        i >= size(str) >> result
+        else >>
+            insert(result str[i])
+            _chars(str result (i + 1))
+    .
+.

@@ -1717,6 +1717,28 @@ Their existence does not make them new fundamental language concepts.
 
 Where practical, library operations should themselves be implementable in Six.
 
+The runtime therefore provides exactly two kinds of name:
+
+Builtins provide a capability Six cannot create for itself. There are six:
+
+print
+input
+size
+insert
+remove
+has?
+
+Conversions move a value between Six's fundamental value categories:
+
+number
+text
+
+Everything else in the list above — size aside — is derivable and belongs in
+Six itself, not in the runtime. In particular map, filter, fold, find, and
+split are ordinary Six code (see the reference split below and stdlib/text.six).
+They are never auto-imported: a program that wants them writes them, copies a
+reference implementation, or imports a standard-library module such as text.six.
+
 Runtime-level operations are appropriate where the language cannot implement them internally, such as:
 
 
@@ -1761,17 +1783,18 @@ The result is text.
 
 
 
-Minimal contract:
+Reference library operation (NOT a builtin):
 
 split text delimiter
 
-returns a Group of text values produced by splitting text on delimiter.
+returns a Group of text values produced by splitting text on delimiter. This is
+ordinary Six — built from size, text indexing, +, Groups, insert, recursion,
+and conditionals — and ships as a reference implementation in stdlib/text.six.
+It is documented here only to fix its expected behavior, not to make it
+primitive. A program obtains it by writing it or importing a module:
 
-Because of subject-first flow:
-
-text >> split " "
-
-works naturally.
+@text
+parts : text["split"](line " ")
 
 
 
