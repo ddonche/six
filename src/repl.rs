@@ -47,13 +47,38 @@ pub fn run() -> i32 {
 
         let trimmed = line.trim();
 
-        // Top-level meta-commands (only when not mid-construct).
+        // Top-level meta-commands (only when not mid-construct). These are REPL
+        // tools, not Six: `clear` removes bindings so a name can be defined
+        // afresh without pretending redeclaration is legal.
         if buffer.is_empty() {
-            match trimmed {
-                "" => continue,
+            if trimmed.is_empty() {
+                continue;
+            }
+            let mut parts = trimmed.split_whitespace();
+            match parts.next().unwrap() {
                 "exit" | "quit" => break,
                 "help" => {
                     print_help();
+                    continue;
+                }
+                "clear_all" => {
+                    interp.clear_all();
+                    println!("cleared the whole session");
+                    continue;
+                }
+                "clear" => {
+                    let names: Vec<&str> = parts.collect();
+                    if names.is_empty() {
+                        println!("usage: clear <name> [name ...]   (or clear_all to reset everything)");
+                    } else {
+                        for n in names {
+                            if interp.clear_binding(n) {
+                                println!("cleared '{}'", n);
+                            } else {
+                                println!("nothing named '{}'", n);
+                            }
+                        }
+                    }
                     continue;
                 }
                 _ => {}
@@ -150,8 +175,13 @@ fn input_is_complete(buffer: &str) -> bool {
 
 fn print_help() {
     println!("Six REPL commands:");
-    println!("  help          show this help");
-    println!("  exit / quit   leave the REPL (also Ctrl-D)");
+    println!("  help                show this help");
+    println!("  clear <name> ...    remove one or more bindings (so they can be redefined)");
+    println!("  clear_all           reset the whole session (keeps builtins)");
+    println!("  exit / quit         leave the REPL (also Ctrl-D)");
+    println!();
+    println!("Redeclaring a name with ':' is an error, exactly as in a .six file;");
+    println!("use '=' to change a value, or 'clear' to redefine a function.");
     println!();
     println!("Enter Six directly. A blank line force-submits a partial entry.");
     println!("Examples:");

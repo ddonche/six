@@ -359,3 +359,32 @@ fn split_is_userland_not_a_builtin() {
     // There is no `split` in the runtime; calling it undefined is an error.
     assert!(err("print(split(\"a b\" \" \"))").contains("undefined name 'split'"));
 }
+
+// --- REPL clear support (an interpreter capability, not language syntax) -----
+
+#[test]
+fn clear_binding_allows_a_fresh_definition() {
+    use six::Interpreter;
+    let mut interp = Interpreter::new();
+    interp.run(&six::parse("x : 5").unwrap()).unwrap();
+    // Redeclaring is illegal while the name exists.
+    assert!(interp.run(&six::parse("x : 7").unwrap()).is_err());
+    // clear removes it (true), and a second clear finds nothing (false).
+    assert!(interp.clear_binding("x"));
+    assert!(!interp.clear_binding("x"));
+    // Now the name is free to define again.
+    interp.run(&six::parse("x : 7").unwrap()).unwrap();
+    assert!(matches!(interp.run(&six::parse("x").unwrap()).unwrap(), Value::Number(n) if n == 7.0));
+}
+
+#[test]
+fn clear_all_resets_but_keeps_builtins() {
+    use six::Interpreter;
+    let mut interp = Interpreter::new();
+    interp.run(&six::parse(":sq(n)\n    n * n\n.\ny : 3").unwrap()).unwrap();
+    interp.clear_all();
+    // User bindings are gone...
+    assert!(interp.run(&six::parse("y").unwrap()).is_err());
+    // ...but builtins remain and the names are free to define again.
+    interp.run(&six::parse(":sq(n)\n    n + n\n.\nprint(sq(4))").unwrap()).unwrap();
+}

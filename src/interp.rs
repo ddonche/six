@@ -75,6 +75,27 @@ impl Interpreter {
         self.base_dir = dir;
     }
 
+    /// Remove a top-level binding by name (a REPL convenience — the name truly
+    /// ceases to exist, so it may be bound again). Builtins live in a parent
+    /// scope and are never affected. Returns whether the name existed.
+    pub fn clear_binding(&self, name: &str) -> bool {
+        let store = self.global.borrow().store();
+        let mut items = store.items.borrow_mut();
+        if let Some(pos) = items.iter().position(|it| pair_key_matches(it, name)) {
+            items.remove(pos);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Clear every top-level binding and the module cache — a full session
+    /// reset. Builtins (in the parent scope) remain.
+    pub fn clear_all(&mut self) {
+        self.global.borrow().store().items.borrow_mut().clear();
+        self.modules.clear();
+    }
+
     /// Run a whole program. Returns the value of its final statement.
     pub fn run(&mut self, program: &[Stmt]) -> Result<Value> {
         let env = self.global.clone();
