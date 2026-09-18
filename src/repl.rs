@@ -19,7 +19,6 @@ const CONT: &str = "...  ";
 
 pub fn run() -> i32 {
     let mut interp = Interpreter::new();
-    interp.set_repl(true);
 
     println!("Six v{} — interactive REPL", env!("CARGO_PKG_VERSION"));
     println!("Type an expression, or a declaration ending in '.'. 'exit' or Ctrl-D to quit.");

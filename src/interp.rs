@@ -32,9 +32,6 @@ pub struct Interpreter {
     builtins: Env,
     pub global: Env,
     out: Box<dyn Write>,
-    /// In REPL mode, re-binding a name at the top level replaces it instead of
-    /// erroring, so a function can be redefined interactively.
-    repl: bool,
     /// Directory that `@name` imports resolve against (the importing file's
     /// directory). Saved and restored around each module evaluation.
     base_dir: PathBuf,
@@ -68,15 +65,9 @@ impl Interpreter {
             builtins,
             global,
             out,
-            repl: false,
             base_dir: PathBuf::from("."),
             modules: HashMap::new(),
         }
-    }
-
-    /// Enable REPL semantics (top-level redefinition).
-    pub fn set_repl(&mut self, repl: bool) {
-        self.repl = repl;
     }
 
     /// Set the directory that top-level `@` imports resolve against.
@@ -186,15 +177,11 @@ impl Interpreter {
     }
 
     /// Create a new binding in this scope's store (an ordinary keyed Group).
-    /// Redeclaration is an error, except that REPL mode replaces at top level.
+    /// Redeclaring a name in the same scope is an error (spec §7.1) — including
+    /// in the REPL, whose inputs accumulate in one persistent global scope.
     fn bind_new(&self, env: &Env, name: &str, value: Value, line: usize) -> Result<()> {
-        let repl_global = self.repl && Rc::ptr_eq(env, &self.global);
         let store = env.borrow().store();
-        if let Some(idx) = store.find_key(name) {
-            if repl_global {
-                set_pair_value(&store, idx, value);
-                return Ok(());
-            }
+        if store.find_key(name).is_some() {
             return Err(SixError::at(line, format!("'{}' is already defined in this scope", name)));
         }
         store.items.borrow_mut().push(Value::new_group(vec![Value::Text(name.to_string()), value]));
