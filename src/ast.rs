@@ -30,6 +30,8 @@ pub enum Stmt {
         immutable: bool,
         line: usize,
     },
+    /// `@name` — import `name.six` and bind its program Group under `name`.
+    Import { name: String, line: usize },
     /// A bare expression evaluated for its value and/or effect.
     Expr(Expr),
 }

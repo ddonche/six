@@ -9,7 +9,9 @@
 //! * **Reference vs value semantics** falls out of [`Value`]: cloning a Group
 //!   shares its `Rc`, cloning anything else copies it.
 
+use std::collections::HashMap;
 use std::io::{self, Write};
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use crate::ast::*;
@@ -24,28 +26,51 @@ enum Flow {
 }
 
 pub struct Interpreter {
+    /// The base scope holding the runtime builtins. Every program (the main
+    /// file and every imported module) runs in a child of this scope, so a
+    /// module's own top-level bindings stay separate from the builtins.
+    builtins: Env,
     pub global: Env,
     out: Box<dyn Write>,
     /// In REPL mode, re-binding a name at the top level replaces it instead of
     /// erroring, so a function can be redefined interactively.
     repl: bool,
+    /// Directory that `@name` imports resolve against (the importing file's
+    /// directory). Saved and restored around each module evaluation.
+    base_dir: PathBuf,
+    /// Module cache keyed by canonical path: a resolved file is evaluated once
+    /// per execution and shared by every importer.
+    modules: HashMap<PathBuf, Value>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
-        let global = Scope::new_global();
-        let mut interp = Interpreter { global: global.clone(), out: Box::new(io::stdout()), repl: false };
-        interp.install_builtins();
-        interp
+        Self::build(Box::new(io::stdout()))
     }
 
     /// Build an interpreter that writes program output to an in-memory buffer,
     /// used by the test suite.
     pub fn with_writer(out: Box<dyn Write>) -> Self {
-        let global = Scope::new_global();
-        let mut interp = Interpreter { global: global.clone(), out, repl: false };
-        interp.install_builtins();
-        interp
+        Self::build(out)
+    }
+
+    fn build(out: Box<dyn Write>) -> Self {
+        let builtins = Scope::new_global();
+        for name in BUILTINS {
+            builtins
+                .borrow_mut()
+                .vars
+                .insert(name.to_string(), Binding { value: Value::Builtin(name), immutable: true });
+        }
+        let global = Scope::child(&builtins);
+        Interpreter {
+            builtins,
+            global,
+            out,
+            repl: false,
+            base_dir: PathBuf::from("."),
+            modules: HashMap::new(),
+        }
     }
 
     /// Enable REPL semantics (top-level redefinition).
@@ -53,24 +78,9 @@ impl Interpreter {
         self.repl = repl;
     }
 
-    fn install_builtins(&mut self) {
-        for name in BUILTINS {
-            self.global.borrow_mut().vars.insert(
-                name.to_string(),
-                Binding { value: Value::Builtin(name), immutable: true },
-            );
-        }
-    }
-
-    /// Load the Six-implemented prelude (map/filter/fold/find) into globals.
-    pub fn load_prelude(&mut self) -> Result<()> {
-        let tokens = crate::lexer::lex(crate::prelude::PRELUDE)?;
-        let program = crate::parser::parse(tokens)?;
-        let env = self.global.clone();
-        for stmt in &program {
-            self.exec_stmt(stmt, &env, false)?;
-        }
-        Ok(())
+    /// Set the directory that top-level `@` imports resolve against.
+    pub fn set_base_dir(&mut self, dir: PathBuf) {
+        self.base_dir = dir;
     }
 
     /// Run a whole program. Returns the value of its final statement.
@@ -121,8 +131,55 @@ impl Interpreter {
                 self.bind_new(env, &def.name, closure, *immutable, *line)?;
                 Ok(Flow::Value(Value::Empty))
             }
+            Stmt::Import { name, line } => {
+                let module = self.import_module(name, *line)?;
+                let immutable = crate::parser::is_immutable_name(name);
+                self.bind_new(env, name, module, immutable, *line)?;
+                Ok(Flow::Value(Value::Empty))
+            }
             Stmt::Expr(e) => self.eval(e, env, tail),
         }
+    }
+
+    /// Resolve, load (once), and return the program Group for `name.six`.
+    ///
+    /// The returned [`Value::Module`] wraps the module's live scope, so keyed
+    /// access on it reads and writes the module's top-level bindings directly.
+    fn import_module(&mut self, name: &str, line: usize) -> Result<Value> {
+        let path = self.base_dir.join(format!("{}.six", name));
+        let canonical = std::fs::canonicalize(&path).map_err(|_| {
+            SixError::at(line, format!("cannot import '{}': no file {} found", name, path.display()))
+        })?;
+
+        // Module identity: a resolved file is evaluated once per execution.
+        if let Some(m) = self.modules.get(&canonical) {
+            return Ok(m.clone());
+        }
+
+        // The module's top-level scope IS its program Group. Cache it before
+        // evaluating so cyclic imports resolve to the in-progress module.
+        let mod_scope = Scope::child(&self.builtins);
+        let module_val = Value::Module(mod_scope.clone());
+        self.modules.insert(canonical.clone(), module_val.clone());
+
+        let source = std::fs::read_to_string(&canonical)
+            .map_err(|e| SixError::at(line, format!("cannot read {}: {}", canonical.display(), e)))?;
+        let program = crate::parse(&source).map_err(|e| SixError::new(format!("in {}: {}", name, e)))?;
+
+        let mod_dir = canonical.parent().map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+        let prev_dir = std::mem::replace(&mut self.base_dir, mod_dir);
+        let result = self.run_program_in(&program, &mod_scope);
+        self.base_dir = prev_dir;
+        result.map_err(|e| SixError::new(format!("in {}: {}", name, e)))?;
+
+        Ok(module_val)
+    }
+
+    fn run_program_in(&mut self, program: &[Stmt], env: &Env) -> Result<()> {
+        for stmt in program {
+            self.exec_stmt(stmt, env, false)?.into_value(self)?;
+        }
+        Ok(())
     }
 
     fn bind_new(&self, env: &Env, name: &str, value: Value, immutable: bool, line: usize) -> Result<()> {
@@ -474,6 +531,16 @@ impl Interpreter {
                     other => Err(SixError::at(line, format!("cannot index text with a {}", other.type_name()))),
                 }
             }
+            Value::Module(scope) => match index {
+                Value::Text(key) => match scope.borrow().vars.get(key) {
+                    Some(binding) => Ok(binding.value.clone()),
+                    None => Err(SixError::at(line, format!("module has no binding \"{}\"", key))),
+                },
+                other => Err(SixError::at(
+                    line,
+                    format!("a module is keyed by name; index it with text, not a {}", other.type_name()),
+                )),
+            },
             other => Err(SixError::at(line, format!("cannot index a {}", other.type_name()))),
         }
     }
@@ -521,6 +588,29 @@ impl Interpreter {
                 // through the base lvalue (supported one level deep).
                 let new_text = self.text_set(&base_v, &idx, value, line)?;
                 self.assign(base, new_text, env, line)
+            }
+            Value::Module(scope) => {
+                let key = match &idx {
+                    Value::Text(k) => k.clone(),
+                    other => {
+                        return Err(SixError::at(line, format!("a module is keyed by name, not a {}", other.type_name())));
+                    }
+                };
+                let mut s = scope.borrow_mut();
+                match s.vars.get_mut(&key) {
+                    Some(binding) => {
+                        if binding.immutable {
+                            return Err(SixError::at(line, format!("cannot reassign immutable module binding '{}'", key)));
+                        }
+                        binding.value = value;
+                    }
+                    None => {
+                        // Missing keyed write creates the binding (spec §13).
+                        let immutable = crate::parser::is_immutable_name(&key);
+                        s.vars.insert(key, Binding { value, immutable });
+                    }
+                }
+                Ok(())
             }
             other => Err(SixError::at(line, format!("cannot index-assign into a {}", other.type_name()))),
         }
@@ -636,6 +726,7 @@ fn values_equal(a: &Value, b: &Value) -> bool {
         (Value::Bool(x), Value::Bool(y)) => x == y,
         (Value::Empty, Value::Empty) => true,
         (Value::Group(x), Value::Group(y)) => Rc::ptr_eq(x, y),
+        (Value::Module(x), Value::Module(y)) => Rc::ptr_eq(x, y),
         _ => false,
     }
 }

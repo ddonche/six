@@ -1,0 +1,11 @@
+# A module is just a .six file. Its top-level bindings ARE its program Group.
+name : "Conan"
+health : 100
+
+:damage(amount)
+    health = health - amount
+.
+
+:heal(amount)
+    health = health + amount
+.

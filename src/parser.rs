@@ -119,6 +119,13 @@ impl Parser {
     // --- statements ---------------------------------------------------------
 
     fn parse_stmt(&mut self) -> Result<Stmt> {
+        // `@name` imports a module.
+        if self.check(&Tok::At) {
+            let line = self.line();
+            self.advance();
+            let name = self.expect_ident("a module name after '@'")?;
+            return Ok(Stmt::Import { name, line });
+        }
         // A statement-initial `:` introduces a function declaration.
         if self.check(&Tok::Colon) {
             return self.parse_func_decl();
@@ -705,6 +712,7 @@ fn describe(tok: &Tok) -> String {
         Tok::Nil => "'nil'".to_string(),
         Tok::Empty => "'..'".to_string(),
         Tok::Dollar => "'$'".to_string(),
+        Tok::At => "'@'".to_string(),
         Tok::Colon => "':'".to_string(),
         Tok::ColonColon => "'::'".to_string(),
         Tok::Assign => "'='".to_string(),

@@ -62,6 +62,11 @@ fn run_file(path: &str) -> ExitCode {
     };
 
     let mut interp = Interpreter::new();
+    if let Some(dir) = std::path::Path::new(path).parent() {
+        if !dir.as_os_str().is_empty() {
+            interp.set_base_dir(dir.to_path_buf());
+        }
+    }
     match interp.run(&program) {
         Ok(_) => ExitCode::SUCCESS,
         Err(e) => {

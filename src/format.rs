@@ -28,6 +28,13 @@ pub fn display(v: &Value) -> String {
             let inner: Vec<String> = items.iter().map(repr).collect();
             format!("[{}]", inner.join(" "))
         }
+        Value::Module(scope) => {
+            let mut pairs: Vec<(String, String)> =
+                scope.borrow().vars.iter().map(|(k, b)| (k.clone(), repr(&b.value))).collect();
+            pairs.sort_by(|a, b| a.0.cmp(&b.0));
+            let inner: Vec<String> = pairs.into_iter().map(|(k, v)| format!("[\"{}\" {}]", k, v)).collect();
+            format!("[{}]", inner.join(" "))
+        }
         Value::Func(_) | Value::Builtin(_) => "<function>".to_string(),
     }
 }

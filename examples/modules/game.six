@@ -1,0 +1,16 @@
+# `@hero` loads hero.six and binds its program Group as `hero`.
+# Everything after is ordinary Six: keyed Group access and calls.
+@hero
+
+print(hero["name"] + " enters with " + text(hero["health"]) + " health")
+
+hero["damage"](30)
+print("After a hit: " + text(hero["health"]))
+
+hero["heal"](10)
+print("After a potion: " + text(hero["health"]))
+
+# A module function is an ordinary value — bind it and call it locally.
+hit : hero["damage"]
+hit(hero["health"])
+print("Final blow — health: " + text(hero["health"]))

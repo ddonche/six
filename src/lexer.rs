@@ -257,6 +257,7 @@ impl Lexer {
             '[' => Tok::LBracket,
             ']' => Tok::RBracket,
             '$' => Tok::Dollar,
+            '@' => Tok::At,
             '~' => Tok::Tilde,
             '^' => Tok::Caret,
             '_' => Tok::Underscore,

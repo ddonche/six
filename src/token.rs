@@ -12,6 +12,7 @@ pub enum Tok {
     Empty, // `..`
     Ident(String),
     Dollar, // `$` — the final valid index
+    At,     // `@` — module import
 
     // --- binding / assignment ---
     Colon,      // `:`   new binding
