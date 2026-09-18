@@ -163,10 +163,12 @@ fn input_is_complete(buffer: &str) -> bool {
     }
 
     // A trailing operator (or binding/flow arrow) expects more input, so the
-    // buffer is complete only when the last token is *not* one of these.
+    // buffer is complete only when the last token is *not* one of these. A
+    // buffer with no significant tokens at all (a comment or blank line) is
+    // complete and simply evaluates to nothing.
     !matches!(
         last_significant,
-        None | Some(Tok::Plus) | Some(Tok::Minus) | Some(Tok::Star) | Some(Tok::Slash)
+        Some(Tok::Plus) | Some(Tok::Minus) | Some(Tok::Star) | Some(Tok::Slash)
             | Some(Tok::Percent) | Some(Tok::Lt) | Some(Tok::Gt) | Some(Tok::Le) | Some(Tok::Ge)
             | Some(Tok::EqEq) | Some(Tok::NotEq) | Some(Tok::And) | Some(Tok::Or) | Some(Tok::Not)
             | Some(Tok::FatArrow) | Some(Tok::Colon) | Some(Tok::ColonColon) | Some(Tok::Assign)

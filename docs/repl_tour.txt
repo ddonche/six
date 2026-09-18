@@ -1,0 +1,205 @@
+# Six REPL feature tour.
+# Pipe this whole file into the REPL to exercise every feature at once:
+#   Linux/mac:  cat docs/repl_tour.txt | six repl
+#   Windows:    Get-Content docs\repl_tour.txt | six repl
+# Lines marked  # ERR  are DELIBERATE errors — you should see an error for them.
+# (Modules via @ and input() are file/stdin based; see examples/ for those.)
+
+# ---------- numbers ----------
+5
+3.14159
+1,000
+12,345.67
+0 - 7
+
+# ---------- text ----------
+"Hello, Six"
+"a" + "b" + "c"
+"tab\there"
+"Dan"[0]
+"Dan"[$]
+name : "cat"
+name[0] = "b"
+name
+
+# ---------- booleans & logic ----------
+true
+not false
+true and false
+true or false
+5 > 3 and 2 <= 2
+3 == 3
+"a" != "b"
+# ERR  no truthiness: a non-boolean condition is rejected
+5 and true
+
+# ---------- empty ----------
+..
+nil
+number ..
+text ..
+[]
+size(..)
+size([])
+
+# ---------- names ----------
+a : 5
+a = 7
+a
+b :: [1 2 3]
+PI : 3.14159
+# ERR  immutable name cannot be reassigned
+PI = 3
+# ERR  redeclaring a name is illegal
+a : 9
+# ERR  reading a name that was never bound
+zzz
+# ERR  = on an undefined name
+q = 1
+
+# ---------- arithmetic & precedence ----------
+2 + 3 * 4
+(2 + 3) * 4
+10 % 3
+7 / 2
+# ERR  division by zero
+1 / 0
+
+# ---------- postfix numeric operators ----------
+3.14159~2
+5.7~
+(11 / 6)^
+(14 / 6)_
+5**
+2**10
+9//
+c : 5
+c++
+c++
+c
+c--
+c
+
+# ---------- conversions ----------
+number("42")
+number("1,000")
+text(46)
+text(true)
+"Age: " + text(46)
+# ERR  + will not mix text and number
+"Age: " + 46
+
+# ---------- groups & indexing ----------
+g : [10 20 30]
+g[0]
+g[$]
+[1 2 [3 4]]
+["Dan" 46 true]
+size(g)
+# ERR  positional index out of range
+g[9]
+# ERR  negative indexes are not supported
+g[0 - 1]
+
+# ---------- keyed groups ----------
+p : [["name" "Dan"] ["age" 46]]
+p["name"]
+has(p "age")
+has(p "banana")
+# ERR  missing keyed READ errors
+p["banana"]
+# missing keyed WRITE creates the key
+p["city"] = "Colorado Springs"
+p["city"]
+
+# ---------- group mutation ----------
+s : []
+insert(s 10)
+insert(s 20)
+insert(s 5 0)
+s
+remove(s 0)
+s
+
+# ---------- splat ----------
+:add3(x y z)
+    x + y + z
+.
+nums : [1 2 3]
+add3(<nums>)
+
+# ---------- functions, closures, recursion ----------
+:square(n)
+    n * n
+.
+square(9)
+:apply(f n)
+    f(n)
+.
+apply(square 6)
+:at-most(limit)
+    :ok(v)
+        v <= limit
+    .
+    ok
+.
+le3 : at-most(3)
+le3(2)
+le3(9)
+:sum(n acc)
+    if
+        n == 0 >> acc
+        else >> sum((n - 1) (acc + n))
+    .
+.
+sum(100000 0)
+
+# ---------- flow & dot-flow ----------
+:dbl(x)
+    x * 2
+.
+:inc(x)
+    x + 1
+.
+10 >> dbl() >> inc()
+[1 2 3 4].size
+
+# ---------- conditionals ----------
+:grade(x)
+    if
+        x > 10 >> "big"
+        x > 5 >> "medium"
+        else >> "small"
+    .
+.
+grade(20)
+grade(7)
+grade(1)
+if any
+    3 > 0 >> print("positive")
+    3 > 10 >> print("huge")
+    else >> print("none")
+.
+msg :
+    if
+        1 < 2 >> "yes"
+        else >> "no"
+    .
+msg
+
+# ---------- block comment ----------
+## this whole
+   thing is ignored ##
+99
+
+# ---------- REPL commands ----------
+clear square
+:square(n)
+    n + n
+.
+square(5)
+clear_all
+# ERR  after clear_all, a is gone
+a
+
+exit

@@ -312,6 +312,11 @@ fn block_and_line_comments() {
     assert_eq!(out(src), "5\n");
 }
 
+#[test]
+fn unterminated_block_comment_errors() {
+    assert!(err("## never closed\nprint(1)").contains("unterminated block comment"));
+}
+
 // --- a program that builds a keyed structure --------------------------------
 
 #[test]

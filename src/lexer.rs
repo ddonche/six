@@ -74,11 +74,17 @@ impl Lexer {
                     Some('#') => {
                         if self.peek_at(1) == Some('#') {
                             // Block comment: `##` ... `##`.
+                            let start = self.line;
                             self.advance();
                             self.advance();
                             loop {
                                 match self.peek() {
-                                    None => break,
+                                    None => {
+                                        return Err(SixError::at(
+                                            start,
+                                            "unterminated block comment: expected a closing '##'",
+                                        ));
+                                    }
                                     Some('#') if self.peek_at(1) == Some('#') => {
                                         self.advance();
                                         self.advance();
