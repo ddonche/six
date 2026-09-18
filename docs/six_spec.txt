@@ -804,7 +804,7 @@ or the equivalent dot form:
 person.has "middle_name"
 
 
-has belongs in the standard library because existence is semantically distinct from emptiness.
+has is a builtin: existence is semantically distinct from emptiness, and it cannot be written in Six (there is no type test to skip non-pair members, and no way to catch a missing-key read).
 
 
 
@@ -1650,28 +1650,29 @@ because dot syntax has a different conceptual job.
 
 
 
-37. Standard Library Philosophy
+37. No Standard Library
 
-The standard library should remain deliberately small.
+Six ships no standard library. The core is only the language, six builtins, and
+two conversions. Everything else — including every "library" operation — lives
+outside Six as ordinary .six modules, imported with @ and totally usable, but
+never part of the language and never auto-loaded. That is the whole reason the
+module capability exists.
 
-The inclusion test is not:
+The test for what belongs in the core (as a builtin) is a single question:
 
+Can you write it in Six?
 
-
-Can we wrap this behavior in a named function?
-
-The inclusion test is:
-
-
-
-Does naming this operation make Six clearer or materially easier to use?
+If yes, it is not a builtin. It goes in a module.
 
 For example:
 
 has
 
 
-earns a standard-library place because structural existence is semantically important and cannot safely be inferred from a value being empty.
+is a builtin because it cannot be written in Six: keyed existence must scan a
+heterogeneous Group and skip members that are not two-member pairs, and Six has
+no type test to recognize a pair and no way to catch a missing-key read. It is a
+capability, not a convenience.
 
 By contrast:
 
@@ -1681,13 +1682,15 @@ enqueue
 dequeue
 
 
-do not earn standard names because the underlying Group operations are already clearer.
+are not provided at all — the underlying Group operations are already clearer,
+and anything one genuinely wanted could be written in Six and shared as a module.
 
 
 
 38. Derived Operations
 
-Operations such as the following may exist in the standard library:
+Operations such as the following are commonly wanted. Only some are provided by
+the core; the rest are ordinary Six, obtained from a module:
 
 size
 has
@@ -1724,11 +1727,11 @@ Conversions move a value between Six's fundamental value categories:
 number
 text
 
-Everything else in the list above — size aside — is derivable and belongs in
-Six itself, not in the runtime. In particular map, filter, fold, find, and
-split are ordinary Six code (see the reference split below and stdlib/text.six).
-They are never auto-imported: a program that wants them writes them, copies a
-reference implementation, or imports a standard-library module such as text.six.
+Everything else — map, filter, fold, find, split — is derivable and belongs in
+Six itself, not in the runtime. It is ordinary Six code (see the reference split
+below and reference/text.six) and is never auto-imported: a program that wants
+it writes it, copies a reference implementation, or imports a module. Six ships
+no standard library; every library lives outside the core and is used via @.
 
 Runtime-level operations are appropriate where the language cannot implement them internally, such as:
 
@@ -1780,7 +1783,7 @@ split text delimiter
 
 returns a Group of text values produced by splitting text on delimiter. This is
 ordinary Six — built from size, text indexing, +, Groups, insert, recursion,
-and conditionals — and ships as a reference implementation in stdlib/text.six.
+and conditionals — and ships as a reference implementation in reference/text.six.
 It is documented here only to fix its expected behavior, not to make it
 primitive. A program obtains it by writing it or importing a module:
 

@@ -1,8 +1,11 @@
-# text.six — a Six standard-library module (the first).
+# text.six — a reference Six library module.
 #
-# Nothing here is part of the Six language. Every operation is ordinary Six,
-# built from size, text indexing, +, Groups, insert, recursion, and
-# conditionals. The module is itself the proof that `split` is not primitive.
+# Six ships NO standard library. The core is only the language, six builtins,
+# and two conversions; every library lives outside Six as an ordinary .six
+# module, used via @. This file is one such module — nothing here is part of
+# the language. Every operation is ordinary Six, built from size, text
+# indexing, +, Groups, insert, recursion, and conditionals, and is itself the
+# proof that `split` is not primitive.
 #
 # There is no automatic import. To use it, place a copy beside your program and
 #   @text

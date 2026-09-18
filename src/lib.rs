@@ -1,9 +1,10 @@
 //! Six — a microscopic general-purpose programming language.
 //!
-//! This crate is the reference implementation of Six v0.1: lexer, parser,
-//! tree-walking interpreter with guaranteed tail-call optimisation, and a
-//! deliberately small standard library. See `docs/six_spec.txt` for the
-//! authoritative language specification.
+//! This crate is the reference implementation of Six v0.1: lexer, parser, and
+//! a tree-walking interpreter with guaranteed tail-call optimisation. Six ships
+//! no standard library — the core is only the language, six builtins, and two
+//! conversions; libraries live outside Six as ordinary `.six` modules used via
+//! `@`. See `docs/six_spec.txt` for the authoritative language specification.
 
 pub mod ast;
 pub mod builtins;
@@ -12,7 +13,6 @@ pub mod format;
 pub mod interp;
 pub mod lexer;
 pub mod parser;
-pub mod prelude;
 pub mod repl;
 pub mod token;
 pub mod value;

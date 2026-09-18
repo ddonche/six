@@ -1,10 +1,13 @@
-//! Runtime-level standard-library operations.
+//! The runtime builtins and conversions.
 //!
-//! These earn a place in Rust either because Six cannot express them from
-//! within itself (I/O, conversions, `size`) or because the operation is a
-//! fundamental Group mutation (`insert`, `remove`). Higher-order helpers
-//! (`map`, `filter`, `fold`, `find`) live in the Six prelude instead, so the
-//! language demonstrably bootstraps them from its own machinery.
+//! A name lives here only when Six cannot express it from within itself: I/O
+//! (`print`, `input`), the size of a value (no way to find a Group's end
+//! otherwise), the fundamental Group mutations (`insert`, `remove` — nothing
+//! else grows or shrinks a Group), and keyed existence (`has` — Six has no type
+//! test to skip non-pair members and no way to catch a missing-key read). Plus
+//! the two value conversions (`number`, `text`). Everything derivable from
+//! these — `map`, `filter`, `fold`, `find`, `split`, … — is ordinary Six and
+//! ships outside the core as `.six` modules, never here.
 
 use std::io::{self, Write};
 
