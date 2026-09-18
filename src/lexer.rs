@@ -224,7 +224,8 @@ impl Lexer {
                     name.push('-');
                     self.advance();
                 }
-                // A trailing `?` marks a predicate name (`even?`, `has?`).
+                // `?` is a legal trailing identifier character (e.g. `even?`).
+                // Six itself uses no `?` names; it carries no special meaning.
                 Some('?') => {
                     name.push('?');
                     self.advance();

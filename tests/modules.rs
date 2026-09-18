@@ -124,7 +124,7 @@ fn module_size_and_has() {
     s.write("hero.six", HERO);
     s.write(
         "main.six",
-        "@hero\nprint(size(hero))\nprint(has?(hero \"health\"))\nprint(has?(hero \"mana\"))",
+        "@hero\nprint(size(hero))\nprint(has(hero \"health\"))\nprint(has(hero \"mana\"))",
     );
     // hero.six has three top-level bindings: name, health, damage.
     assert_eq!(s.run("main.six"), "3\ntrue\nfalse\n");
@@ -170,7 +170,7 @@ fn module_opens_with_splat() {
 
 #[test]
 fn module_supports_insert_remove_size_has() {
-    // (4) insert / remove / size / has? all work through ordinary Group behavior.
+    // (4) insert / remove / size / has all work through ordinary Group behavior.
     let s = Sandbox::new();
     s.write("m.six", "health : 100\n");
     s.write(
@@ -178,12 +178,12 @@ fn module_supports_insert_remove_size_has() {
         concat!(
             "@m\n",
             "print(size(m))\n",
-            "print(has?(m \"health\"))\n",
+            "print(has(m \"health\"))\n",
             "insert(m [\"mana\" 50])\n",   // append a new pair like any Group
             "print(size(m))\n",
             "print(m[\"mana\"])\n",
             "remove(m 0)\n",               // drop the first pair positionally
-            "print(has?(m \"health\"))\n",
+            "print(has(m \"health\"))\n",
         ),
     );
     assert_eq!(s.run("main.six"), "1\ntrue\n2\n50\nfalse\n");

@@ -18,7 +18,7 @@ pub fn dispatch(interp: &mut Interpreter, name: &str, args: Vec<Value>, line: us
         "print" => builtin_print(interp, args, line),
         "input" => builtin_input(interp, args, line),
         "size" => builtin_size(args, line),
-        "has?" => builtin_has(args, line),
+        "has" => builtin_has(args, line),
         "number" => builtin_number(args, line),
         "text" => builtin_text(args, line),
         "insert" => builtin_insert(args, line),
@@ -79,12 +79,12 @@ fn builtin_size(args: Vec<Value>, line: usize) -> Result<Value> {
 }
 
 fn builtin_has(args: Vec<Value>, line: usize) -> Result<Value> {
-    arity("has?", &args, 2, 2, line)?;
+    arity("has", &args, 2, 2, line)?;
     let key = match &args[1] {
         Value::Text(k) => k,
-        other => return Err(SixError::at(line, format!("has? needs a text key, not a {}", other.type_name()))),
+        other => return Err(SixError::at(line, format!("has needs a text key, not a {}", other.type_name()))),
     };
-    let g = as_group(&args[0], line, "has?")?;
+    let g = as_group(&args[0], line, "has")?;
     Ok(Value::Bool(g.find_key(key).is_some()))
 }
 

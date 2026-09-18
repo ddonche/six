@@ -223,7 +223,7 @@ inventory : [
         item["price"] >= HIGH_VALUE >>
             print("  High-value item")
 
-        not has?(item "note") >>
+        not has(item "note") >>
             print("  No note")
 
         else >>
@@ -249,7 +249,7 @@ inventory : [
 
 :show-field(item key)
     if
-        has?(item key) >>
+        has(item key) >>
             print(key + ": " + text(item[key]))
 
         else >>

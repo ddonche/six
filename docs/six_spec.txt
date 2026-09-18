@@ -796,15 +796,15 @@ and no "middle_name" key at all.
 
 Programs that need to distinguish existence should use an operation such as:
 
-has? person "middle_name"
+has person "middle_name"
 
 
 or the equivalent dot form:
 
-person.has? "middle_name"
+person.has "middle_name"
 
 
-has? belongs in the standard library because existence is semantically distinct from emptiness.
+has belongs in the standard library because existence is semantically distinct from emptiness.
 
 
 
@@ -1416,16 +1416,7 @@ Add a tiny identifier/naming rule:
 
 
 
-? may appear at the end of an identifier. By convention, names ending in ? are Boolean predicates. The suffix has no special evaluation semantics.
-
-So:
-
-even?
-has?
-empty?
-valid?
-
-are simply legal function names.
+? may appear at the end of an identifier. It carries no meaning: the suffix has no special evaluation semantics, nothing enforces a Boolean result, and Six itself uses no ? in any name (the keyed-existence builtin is plain `has`). A name such as even? is simply a legal identifier a programmer may choose; the language neither encourages nor relies on the form.
 
 
 
@@ -1677,7 +1668,7 @@ Does naming this operation make Six clearer or materially easier to use?
 
 For example:
 
-has?
+has
 
 
 earns a standard-library place because structural existence is semantically important and cannot safely be inferred from a value being empty.
@@ -1699,7 +1690,7 @@ do not earn standard names because the underlying Group operations are already c
 Operations such as the following may exist in the standard library:
 
 size
-has?
+has
 split
 map
 filter
@@ -1726,7 +1717,7 @@ input
 size
 insert
 remove
-has?
+has
 
 Conversions move a value between Six's fundamental value categories:
 
@@ -1884,7 +1875,7 @@ The accumulating Group is intentionally shared through reference semantics.
             word : words[i]
 
             if
-                counts.has? word >> counts[word] = counts[word] + 1
+                counts.has word >> counts[word] = counts[word] + 1
                 else             >> counts[word] = 1
             .
 
@@ -1908,7 +1899,7 @@ keyed Groups
 
 
 
-has?
+has
 
 
 

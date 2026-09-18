@@ -664,7 +664,7 @@ impl Flow {
 /// ordinary Six, written by the programmer, never primitive.
 pub const BUILTINS: &[&str] = &[
     // The six capability builtins.
-    "print", "input", "size", "insert", "remove", "has?",
+    "print", "input", "size", "insert", "remove", "has",
     // Conversions between value categories (associated with the value types,
     // not capabilities — the shared callable machinery is an implementation
     // detail of the language model).

@@ -26,7 +26,7 @@
             word : words[i]
 
             if
-                has?(counts word) >> counts[word] = counts[word] + 1
+                has(counts word) >> counts[word] = counts[word] + 1
                 else >> counts[word] = 1
             .
 

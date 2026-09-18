@@ -163,7 +163,7 @@ fn missing_keyed_read_errors_but_write_creates() {
 
 #[test]
 fn has_distinguishes_existence_from_emptiness() {
-    let src = "p : [[\"mid\" (text ..)]]\nprint(has?(p \"mid\"))\nprint(has?(p \"nope\"))";
+    let src = "p : [[\"mid\" (text ..)]]\nprint(has(p \"mid\"))\nprint(has(p \"nope\"))";
     assert_eq!(out(src), "true\nfalse\n");
 }
 
@@ -339,7 +339,7 @@ fn word_frequency_counter() {
         "        else >>\n",
         "            word : words[i]\n",
         "            if\n",
-        "                has?(counts word) >> counts[word] = counts[word] + 1\n",
+        "                has(counts word) >> counts[word] = counts[word] + 1\n",
         "                else >> counts[word] = 1\n",
         "            .\n",
         "            count(words counts (i + 1))\n",
