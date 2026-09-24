@@ -28,6 +28,17 @@
     .
 .
 
+:find(list f i)
+    if
+        i >= size(list) >> ..
+        else >>
+            if
+                f(list[i]) >> list[i]
+                else >> find(list f (i + 1))
+            .
+    .
+.
+
 :double(x)
     x * 2
 .
@@ -40,6 +51,12 @@
     a + b
 .
 
+:greater-than-five?(x)
+    x > 5
+.
+
 print(map([1 2 3 4 5] double 0 []))
 print(filter([1 2 3 4 5 6 7 8] even? 0 []))
 print(fold([1 2 3 4 5] 0 add 0))
+print(find([1 2 3 4 5 6 7 8] greater-than-five? 0))
+print(find([1 2 3 4 5] greater-than-five? 0))

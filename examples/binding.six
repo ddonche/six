@@ -1,0 +1,28 @@
+# Binding, rebinding, and deep copying in Six.
+
+# Initial binding.
+count : 1
+print(count)
+
+# Rebinding.
+count = count + 1
+print(count)
+
+# A nested Group.
+original : [
+    [1 2]
+    [3 4]
+]
+
+# Normal binding: alias shares the same Group.
+alias : original
+
+# Deep copy: copied is independent.
+copied :: original
+
+# Change the first value inside the first nested Group through the alias.
+alias[0][0] = 99
+
+print(original)
+print(alias)
+print(copied)
