@@ -46,6 +46,9 @@ pub struct Interpreter {
     /// Module cache keyed by canonical path: a resolved file is evaluated once
     /// per execution and shared by every importer.
     modules: HashMap<PathBuf, Value>,
+    /// The current program's arguments, reported by `in(["process" "arguments"])`.
+    /// Empty unless `main` sets them for a script run.
+    args: Vec<String>,
 }
 
 impl Interpreter {
@@ -86,9 +89,15 @@ impl Interpreter {
             stdin_pending: Vec::new(),
             base_dir: PathBuf::from("."),
             modules: HashMap::new(),
+            args: Vec::new(),
         };
         interp.install_channels();
         interp
+    }
+
+    /// Set the program arguments reported by `in(["process" "arguments"])`.
+    pub fn set_args(&mut self, args: Vec<String>) {
+        self.args = args;
     }
 
     /// Pre-bind the three runtime channels `input`, `output`, `error` in the
@@ -723,8 +732,9 @@ impl Interpreter {
                 let assoc = crate::host::net_open(&items, line)?;
                 Ok(Value::Group(crate::value::new_relationship(Vec::new(), assoc)))
             }
-            Some(d @ ("process" | "device")) => {
-                Err(SixError::at(line, format!("open: the '{}' domain is not implemented yet in this build", d)))
+            Some("process") => crate::host::spawn_child(&items, line),
+            Some("device") => {
+                Err(SixError::at(line, "open: the 'device' domain is not implemented yet in this build"))
             }
             _ => Err(SixError::at(line, "open: not a recognized host descriptor")),
         }
@@ -760,13 +770,18 @@ impl Interpreter {
                 Some(Assoc::RuntimeOutput) => return Err(SixError::at(line, "in: cannot read from the output channel")),
                 Some(Assoc::RuntimeError) => return Err(SixError::at(line, "in: cannot read from the error channel")),
                 Some(Assoc::TcpListener(_)) => return Err(SixError::at(line, "in: a TCP listener does not support in")),
+                Some(Assoc::ChildInput(_)) => return Err(SixError::at(line, "in: a child input channel does not support in")),
                 Some(Assoc::Tcp(_)) | Some(Assoc::Udp(_)) => {}
+                Some(Assoc::ChildProc(_)) | Some(Assoc::ChildOutput(_)) | Some(Assoc::ChildError(_)) => {}
             }
         }
         let mut a = g.assoc.borrow_mut();
         match a.as_deref_mut() {
             Some(Assoc::Tcp(c)) => crate::host::tcp_in(c, line),
             Some(Assoc::Udp(u)) => crate::host::udp_in(u, line),
+            Some(Assoc::ChildProc(s)) => crate::host::child_wait(s, line),
+            Some(Assoc::ChildOutput(c)) => crate::host::child_out_read(c, line),
+            Some(Assoc::ChildError(c)) => crate::host::child_err_read(c, line),
             _ => unreachable!(),
         }
     }
@@ -776,8 +791,19 @@ impl Interpreter {
         match domain_of(&items) {
             Some("file") => crate::host::file_in(&items, line),
             Some("network") => Err(SixError::at(line, "in: open a network relationship first with open(...)")),
-            Some(d @ ("process" | "device")) => {
-                Err(SixError::at(line, format!("in: the '{}' domain is not implemented yet in this build", d)))
+            Some("process") => {
+                use crate::host::ProcDesc;
+                match crate::host::parse_process(&items, line)? {
+                    ProcDesc::Arguments => Ok(crate::host::proc_arguments(&self.args)),
+                    ProcDesc::Environment => crate::host::proc_env_all(line),
+                    ProcDesc::EnvVar(name) => crate::host::proc_env_get(&name, line),
+                    ProcDesc::Directory => crate::host::proc_dir_get(line),
+                    ProcDesc::Exit => Err(SixError::at(line, "in([\"process\"]) is not valid; [\"process\"] identifies the process for out(... code) exit")),
+                    ProcDesc::Child => Err(SixError::at(line, "in: open a child process first with open([\"process\" program arguments representation])")),
+                }
+            }
+            Some("device") => {
+                Err(SixError::at(line, "in: the 'device' domain is not implemented yet in this build"))
             }
             _ => Err(SixError::at(line, "in: not a host relationship, and not a recognized descriptor")),
         }
@@ -788,8 +814,19 @@ impl Interpreter {
         match domain_of(&items) {
             Some("file") => crate::host::file_out(&items, value, line),
             Some("network") => Err(SixError::at(line, "out: open a network relationship first with open(...)")),
-            Some(d @ ("process" | "device")) => {
-                Err(SixError::at(line, format!("out: the '{}' domain is not implemented yet in this build", d)))
+            Some("process") => {
+                use crate::host::ProcDesc;
+                match crate::host::parse_process(&items, line)? {
+                    ProcDesc::Exit => crate::host::proc_exit(value, line),
+                    ProcDesc::EnvVar(name) => crate::host::proc_env_set(&name, value, line),
+                    ProcDesc::Directory => crate::host::proc_dir_set(value, line),
+                    ProcDesc::Arguments => Err(SixError::at(line, "out([\"process\" \"arguments\"] …) is not valid; arguments are observational")),
+                    ProcDesc::Environment => Err(SixError::at(line, "out([\"process\" \"environment\"] …) is not valid; set individual variables with [\"process\" \"environment\" name]")),
+                    ProcDesc::Child => Err(SixError::at(line, "out: open a child process first with open([\"process\" program arguments representation])")),
+                }
+            }
+            Some("device") => {
+                Err(SixError::at(line, "out: the 'device' domain is not implemented yet in this build"))
             }
             _ => Err(SixError::at(line, "out: not a host relationship, and not a recognized descriptor")),
         }
@@ -816,13 +853,18 @@ impl Interpreter {
                     return self.write_channel(value, true, line);
                 }
                 Some(Assoc::TcpListener(_)) => return Err(SixError::at(line, "out: a TCP listener does not support out")),
+                Some(Assoc::ChildOutput(_)) => return Err(SixError::at(line, "out: a child output channel does not support out")),
+                Some(Assoc::ChildError(_)) => return Err(SixError::at(line, "out: a child error channel does not support out")),
                 Some(Assoc::Tcp(_)) | Some(Assoc::Udp(_)) => {}
+                Some(Assoc::ChildProc(_)) | Some(Assoc::ChildInput(_)) => {}
             }
         }
         let mut a = g.assoc.borrow_mut();
         match a.as_deref_mut() {
             Some(Assoc::Tcp(c)) => crate::host::tcp_out(c, value, line),
             Some(Assoc::Udp(u)) => crate::host::udp_out(u, value, line),
+            Some(Assoc::ChildProc(s)) => crate::host::child_terminate(s, value, line),
+            Some(Assoc::ChildInput(c)) => crate::host::child_in_write(c, value, line),
             _ => unreachable!(),
         }
     }

@@ -382,3 +382,225 @@ fn udp_malformed_output_errors() {
     );
     assert!(err(&src).contains("port"));
 }
+
+// --- process domain (Addendum C) --------------------------------------------
+//
+// The library interpreter carries no program arguments, so
+// in(["process" "arguments"]) is the empty Group in these tests.
+
+/// A unique environment variable name, so parallel tests never collide on the
+/// shared process environment.
+fn env_name(tag: &str) -> String {
+    static ENV_COUNTER: AtomicUsize = AtomicUsize::new(0);
+    let id = ENV_COUNTER.fetch_add(1, Ordering::SeqCst);
+    format!("SIX_TEST_{}_{}_{}", tag, std::process::id(), id)
+}
+
+#[test]
+fn process_arguments_is_empty_group() {
+    // No args supplied to the library interpreter -> [].
+    assert_eq!(out("out(output text(size(in([\"process\" \"arguments\"]))))"), "0");
+    // Arguments are observational; writing them is invalid.
+    assert!(err("out([\"process\" \"arguments\"] [])").contains("observational"));
+}
+
+#[test]
+fn process_directory_is_nonempty_text_and_settable() {
+    // The working directory reads back as non-empty Text.
+    assert_eq!(out("d : in([\"process\" \"directory\"])\nout(output text(size(d) > 0))"), "true");
+    // Setting it to its current value exercises the out path without moving the
+    // shared process cwd (which parallel tests depend on).
+    assert_eq!(
+        out("d : in([\"process\" \"directory\"])\nr : out([\"process\" \"directory\"] d)\nout(output text(r == ..))"),
+        "true"
+    );
+    assert!(err("out([\"process\" \"directory\"] 5)").contains("must be text"));
+}
+
+#[test]
+fn process_environment_missing_set_and_remove() {
+    let name = env_name("VAR");
+    // Missing variable -> ..
+    let missing = format!("out(output text(in([\"process\" \"environment\" \"{name}\"]) == ..))");
+    assert_eq!(out(&missing), "true");
+    // Set then read back.
+    let set = format!(
+        "r : out([\"process\" \"environment\" \"{name}\"] \"hello\")\nout(output in([\"process\" \"environment\" \"{name}\"]))"
+    );
+    assert_eq!(out(&set), "hello");
+    // Remove (out ..) then read -> ..
+    let remove = format!(
+        "out([\"process\" \"environment\" \"{name}\"] \"x\")\nout([\"process\" \"environment\" \"{name}\"] ..)\nout(output text(in([\"process\" \"environment\" \"{name}\"]) == ..))"
+    );
+    assert_eq!(out(&remove), "true");
+}
+
+#[test]
+fn process_environment_whole_is_group_of_pairs() {
+    let name = env_name("WHOLE");
+    // A variable we set is visible in the whole-environment listing.
+    let src = format!(
+        "out([\"process\" \"environment\" \"{name}\"] \"present\")\n\
+         env : in([\"process\" \"environment\"])\n\
+         :look(g i)\n\
+             if\n\
+                 i == size(g) >> \"\"\n\
+                 g[i][0] == \"{name}\" >> g[i][1]\n\
+                 else >> look(g i + 1)\n\
+             .\n\
+         .\n\
+         out(output look(env 0))"
+    );
+    assert_eq!(out(&src), "present");
+}
+
+#[test]
+fn process_environment_value_must_be_text_or_empty() {
+    let name = env_name("BAD");
+    assert!(err(&format!("out([\"process\" \"environment\" \"{name}\"] 5)")).contains("must be text"));
+}
+
+#[test]
+fn process_current_descriptor_rejects_open_and_close() {
+    // ["process"] identifies the current process for exit; open/close/in are invalid.
+    assert!(err("open([\"process\" \"arguments\"])").contains("child process descriptor"));
+    assert!(err("close([\"process\" \"directory\"])").contains("not a host relationship"));
+    assert!(err("in([\"process\"])").contains("out"));
+}
+
+#[test]
+fn process_exit_validates_code() {
+    // A non-integer / negative / non-number code errors before any exit occurs.
+    assert!(err("out([\"process\"] 1.5)").contains("non-negative integer"));
+    assert!(err("out([\"process\"] (0 - 1))").contains("non-negative integer"));
+    assert!(err("out([\"process\"] \"ok\")").contains("must be a number"));
+}
+
+#[test]
+fn child_text_round_trip_and_exit_status() {
+    let src = "child : open([\"process\" \"cat\" [] \"text\"])\n\
+               w : out(child[\"input\"] \"hello world\")\n\
+               c : close(child[\"input\"])\n\
+               line : in(child[\"output\"])\n\
+               out(output line)\n\
+               out(output \" \")\n\
+               out(output text(in(child)))\n\
+               z : close(child)";
+    assert_eq!(out(src), "hello world 0");
+}
+
+#[test]
+fn child_stderr_and_nonzero_exit() {
+    let src = "child : open([\"process\" \"sh\" [\"-c\" \"echo oops 1>&2 ; exit 3\"] \"text\"])\n\
+               c : close(child[\"input\"])\n\
+               e : in(child[\"error\"])\n\
+               out(output e)\n\
+               out(output text(in(child)))\n\
+               z : close(child)";
+    // stderr text ends with a newline from echo.
+    assert_eq!(out(src), "oops\n3");
+}
+
+#[test]
+fn child_binary_output() {
+    let src = "child : open([\"process\" \"printf\" [\"ABC\"] \"binary\"])\n\
+               c : close(child[\"input\"])\n\
+               bytes : in(child[\"output\"])\n\
+               out(output text(bytes[0]))\n\
+               out(output \" \")\n\
+               out(output text(size(bytes)))\n\
+               z : close(child)";
+    assert_eq!(out(src), "65 3");
+}
+
+#[test]
+fn child_output_eof_is_empty() {
+    let src = "child : open([\"process\" \"true\" [] \"text\"])\n\
+               c : close(child[\"input\"])\n\
+               first : in(child[\"output\"])\n\
+               out(output text(first == ..))\n\
+               z : close(child)";
+    assert_eq!(out(src), "true");
+}
+
+#[test]
+fn child_terminate_yields_abnormal_status() {
+    // A killed child has no normal numeric exit status -> in(child) is ..
+    let src = "child : open([\"process\" \"sleep\" [\"30\"] \"text\"])\n\
+               k : out(child ..)\n\
+               out(output text(in(child) == ..))\n\
+               z : close(child)";
+    assert_eq!(out(src), "true");
+}
+
+#[test]
+fn child_environment_override_applies() {
+    let name = env_name("CHILD");
+    // The child echoes exactly the overridden variable, so a single read of its
+    // output is the whole value.
+    let src = format!(
+        "child : open([\"process\" \"sh\" [\"-c\" \"printf %s \\\"${name}\\\"\"] \"text\" [[\"environment\" [[\"{name}\" \"42\"]]]]])\n\
+         c : close(child[\"input\"])\n\
+         v : in(child[\"output\"])\n\
+         s : in(child)\n\
+         out(output v)"
+    );
+    assert_eq!(out(&src), "42");
+}
+
+#[test]
+fn child_channel_capability_errors() {
+    // in on input, out on output/error are all invalid (capability table C.26).
+    let base = "child : open([\"process\" \"cat\" [] \"text\"])\n";
+    assert!(err(&format!("{base}in(child[\"input\"])")).contains("child input channel does not support in"));
+    assert!(err(&format!("{base}out(child[\"output\"] \"x\")")).contains("child output channel does not support out"));
+    assert!(err(&format!("{base}out(child[\"error\"] \"x\")")).contains("child error channel does not support out"));
+    // Only .. terminates the child lifecycle relationship.
+    assert!(err(&format!("{base}out(child \"x\")")).contains("terminate"));
+}
+
+#[test]
+fn child_options_are_validated() {
+    assert!(
+        err("open([\"process\" \"cat\" [] \"text\" [[\"directory\" \"/a\"] [\"directory\" \"/b\"]]])")
+            .contains("duplicate option")
+    );
+    assert!(err("open([\"process\" \"cat\" [] \"text\" [[\"bogus\" \"x\"]]])").contains("unknown option"));
+    assert!(err("open([\"process\" \"cat\" [] \"text\" [[\"directory\"]]])").contains("two-element Group"));
+    assert!(
+        err("open([\"process\" \"cat\" [] \"text\" [[\"environment\" [[\"A\" \"1\"] [\"A\" \"2\"]]]]])")
+            .contains("duplicate environment override")
+    );
+}
+
+#[test]
+fn child_descriptor_validation() {
+    assert!(err("open([\"process\" 5 [] \"text\"])").contains("program must be text"));
+    assert!(err("open([\"process\" \"cat\" [1 2] \"text\"])").contains("each argument must be text"));
+    assert!(err("open([\"process\" \"cat\" [] \"other\"])").contains("representation"));
+    // An unopened child descriptor is not a direct in/out target.
+    assert!(err("in([\"process\" \"cat\" [] \"text\"])").contains("open a child"));
+    assert!(err("out([\"process\" \"cat\" [] \"text\"] \"x\")").contains("open a child"));
+}
+
+#[test]
+fn child_deep_copy_strips_associations() {
+    // A deep copy of a child keeps visible channel Groups but none of their
+    // runtime associations (C.24).
+    let src = "child : open([\"process\" \"cat\" [] \"text\"])\n\
+               copy :: child\n\
+               out(copy[\"input\"] \"x\")";
+    assert!(err(src).contains("not a host relationship"));
+}
+
+#[test]
+fn child_channels_outlive_lifecycle_close() {
+    // close(child) releases only the lifecycle relationship; a separately held
+    // output channel remains readable (C.22).
+    let src = "child : open([\"process\" \"printf\" [\"hi\"] \"text\"])\n\
+               o : child[\"output\"]\n\
+               c : close(child[\"input\"])\n\
+               z : close(child)\n\
+               out(output in(o))";
+    assert_eq!(out(src), "hi");
+}

@@ -3,6 +3,33 @@
 Every fix or feature bumps the version — including REPL changes. `six --version`,
 the REPL banner, and `six --help` all report it.
 
+## v0.1.8
+- Host I/O process domain (Addendum C). Current-process state through direct
+  descriptors, child processes as persistent runtime-backed Groups:
+  - ["process" "arguments"] -> in: the program's arguments as a Group of Text
+    ([] when none; observational, never writable).
+  - ["process" "environment"] -> in: the whole environment as [name value] Text
+    pairs (order unspecified; a non-text name/value is an error).
+  - ["process" "environment" name] -> in returns the value or .. when unset; out
+    sets it (Text) or removes it (..).
+  - ["process" "directory"] -> in/out: read or change the working directory.
+  - ["process"] -> out code: exit the current Six process (integer status).
+  - open(["process" program args repr options?]) spawns a child and returns a
+    Group [["input" _] ["output" _] ["error" _]] of runtime-backed channels.
+    Options are ["directory" path] and ["environment" overrides] (two-element
+    keyed Groups; unknown/duplicate/malformed options are errors). Child env and
+    directory are snapshotted at open; a .. override removes a variable.
+  - Channels: out(child["input"] …)/close; in(child["output"])/in(child["error"])
+    /close. Text = UTF-8 (split characters buffered); binary = Group of bytes
+    0..255; .. at EOF ("" and [] are not EOF).
+  - in(child) blocks for termination: a non-negative Number exit status, or ..
+    for signal/abnormal termination; the result is stable and never closes a
+    channel. out(child ..) requests termination; close(child) releases only the
+    lifecycle relationship, leaving separately held channels live. Aliasing keeps
+    associations; :: deep-copy strips them.
+- Runtime input is now injectable, so captured/test interpreters read an empty
+  (EOF) source instead of blocking on real stdin.
+
 ## v0.1.7
 - Host I/O network domain (Addendum B): persistent TCP and UDP via open/in/out/close.
   - TCP connection ["network" "tcp" addr port repr]: byte-stream in/out (text or

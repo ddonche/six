@@ -34,6 +34,16 @@ pub enum Assoc {
     TcpListener(TcpListenerState),
     /// A bound UDP socket (`in` / `out` / `close`).
     Udp(UdpState),
+    /// A child process lifecycle relationship (`in` waits, `out ..` terminates,
+    /// `close` releases). Holds the process handle and, once observed, the
+    /// stable termination result.
+    ChildProc(ChildProcState),
+    /// A child process input channel (`out` / `close`).
+    ChildInput(ChildIn),
+    /// A child process normal-output channel (`in` / `close`).
+    ChildOutput(ChildOut),
+    /// A child process diagnostic-output channel (`in` / `close`).
+    ChildError(ChildErr),
     /// A relationship that has been closed. Any further use is a runtime error;
     /// closing again is a runtime error. Kept distinct from "no association" so
     /// the error message can tell a closed relationship from a deep copy.
@@ -50,6 +60,10 @@ impl Assoc {
             Assoc::Tcp(_) => "TCP connection",
             Assoc::TcpListener(_) => "TCP listener",
             Assoc::Udp(_) => "UDP socket",
+            Assoc::ChildProc(_) => "child process",
+            Assoc::ChildInput(_) => "child input channel",
+            Assoc::ChildOutput(_) => "child output channel",
+            Assoc::ChildError(_) => "child error channel",
             Assoc::Closed => "closed relationship",
         }
     }
@@ -80,6 +94,42 @@ pub struct TcpListenerState {
 pub struct UdpState {
     socket: std::net::UdpSocket,
     mode: Repr,
+}
+
+/// A spawned child process. The stdin/stdout/stderr handles are moved out into
+/// their own channel associations at open time, so this holds only the process
+/// handle (for waiting and termination) and the cached final termination result
+/// (so repeated `in(child)` yields the same value — Addendum C.19).
+#[derive(Debug)]
+pub struct ChildProcState {
+    child: std::process::Child,
+    status: Option<Value>,
+}
+
+/// A child process input channel: the child's stdin, plus the fixed
+/// representation chosen at open time.
+#[derive(Debug)]
+pub struct ChildIn {
+    stream: std::process::ChildStdin,
+    mode: Repr,
+}
+
+/// A child process normal-output channel: the child's stdout, its
+/// representation, and a buffer for a UTF-8 character split across host reads.
+#[derive(Debug)]
+pub struct ChildOut {
+    stream: std::process::ChildStdout,
+    mode: Repr,
+    buf: Vec<u8>,
+}
+
+/// A child process diagnostic-output channel: the child's stderr, its
+/// representation, and a split-character buffer.
+#[derive(Debug)]
+pub struct ChildErr {
+    stream: std::process::ChildStderr,
+    mode: Repr,
+    buf: Vec<u8>,
 }
 
 /// Split the longest valid UTF-8 prefix out of `buf`, leaving incomplete
@@ -533,6 +583,366 @@ fn system_time_micros(t: Option<SystemTime>) -> Value {
         Some(d) => Value::Number(d.as_micros() as f64),
         None => Value::Empty,
     }
+}
+
+// --- process domain (Addendum C) --------------------------------------------
+//
+// Two kinds of target share the `["process" ...]` prefix:
+//   * current-process descriptors  — direct, association-free state (arguments,
+//     environment, working directory, exit), handled by `in`/`out`;
+//   * child-process descriptors     — `["process" program args repr options?]`,
+//     established with `open` into a runtime-backed Group whose visible contents
+//     are the `input`/`output`/`error` channel Groups.
+
+use std::collections::HashSet;
+use std::process::{Command, Stdio};
+
+/// A parsed `["process" ...]` descriptor. Length disambiguates: 1 = exit,
+/// 2/3 = a current-process form, 4/5 = a child descriptor (so a child program
+/// may even be named "arguments" or "environment").
+pub enum ProcDesc {
+    Exit,
+    Arguments,
+    Environment,
+    EnvVar(String),
+    Directory,
+    Child,
+}
+
+/// Classify a `["process" ...]` descriptor by shape.
+pub fn parse_process(items: &[Value], line: usize) -> Result<ProcDesc> {
+    match items.len() {
+        1 => Ok(ProcDesc::Exit),
+        2 => match &items[1] {
+            Value::Text(k) if k == "arguments" => Ok(ProcDesc::Arguments),
+            Value::Text(k) if k == "environment" => Ok(ProcDesc::Environment),
+            Value::Text(k) if k == "directory" => Ok(ProcDesc::Directory),
+            _ => Err(SixError::at(
+                line,
+                "process descriptor: expected \"arguments\", \"environment\", or \"directory\"",
+            )),
+        },
+        3 => match &items[1] {
+            Value::Text(k) if k == "environment" => match &items[2] {
+                Value::Text(name) => Ok(ProcDesc::EnvVar(name.clone())),
+                _ => Err(SixError::at(line, "process environment name must be text")),
+            },
+            _ => Err(SixError::at(line, "malformed process descriptor")),
+        },
+        4 | 5 => Ok(ProcDesc::Child),
+        _ => Err(SixError::at(line, "malformed process descriptor")),
+    }
+}
+
+/// `in(["process" "arguments"])` — the current program's arguments as a Group of
+/// Text (`[]` when none). Observational; never writable.
+pub fn proc_arguments(args: &[String]) -> Value {
+    Value::new_group(args.iter().map(|a| Value::Text(a.clone())).collect())
+}
+
+/// `in(["process" "environment"])` — the whole environment as a Group of
+/// `[name value]` Text pairs (order unspecified). A name or value that is not
+/// valid Six Text is a runtime error.
+pub fn proc_env_all(line: usize) -> Result<Value> {
+    let mut pairs = Vec::new();
+    for (k, v) in std::env::vars_os() {
+        let name = k
+            .into_string()
+            .map_err(|_| SixError::at(line, "process: an environment variable name is not valid text"))?;
+        let value = v
+            .into_string()
+            .map_err(|_| SixError::at(line, format!("process: the value of {} is not valid text", name)))?;
+        pairs.push(pair(&name, Value::Text(value)));
+    }
+    Ok(Value::new_group(pairs))
+}
+
+/// `in(["process" "environment" name])` — the variable's value as Text, or `..`
+/// when it is not set. A set-but-invalid value is a runtime error.
+pub fn proc_env_get(name: &str, line: usize) -> Result<Value> {
+    match std::env::var_os(name) {
+        None => Ok(Value::Empty),
+        Some(v) => match v.into_string() {
+            Ok(s) => Ok(Value::Text(s)),
+            Err(_) => Err(SixError::at(line, format!("process: the value of {} is not valid text", name))),
+        },
+    }
+}
+
+/// `out(["process" "environment" name] value)` — set (Text) or remove (`..`) a
+/// variable; returns `..`.
+pub fn proc_env_set(name: &str, value: &Value, line: usize) -> Result<Value> {
+    match value {
+        Value::Text(v) => std::env::set_var(name, v),
+        Value::Empty => std::env::remove_var(name),
+        other => {
+            return Err(SixError::at(
+                line,
+                format!("process: an environment value must be text (or .. to remove), not a {}", other.type_name()),
+            ));
+        }
+    }
+    Ok(Value::Empty)
+}
+
+/// `in(["process" "directory"])` — the current working directory as Text.
+pub fn proc_dir_get(line: usize) -> Result<Value> {
+    let dir = std::env::current_dir()
+        .map_err(|e| SixError::at(line, format!("process: cannot read the working directory: {}", e)))?;
+    match dir.into_os_string().into_string() {
+        Ok(s) => Ok(Value::Text(s)),
+        Err(_) => Err(SixError::at(line, "process: the working directory path is not valid text")),
+    }
+}
+
+/// `out(["process" "directory"] path)` — change the working directory; `..`.
+pub fn proc_dir_set(value: &Value, line: usize) -> Result<Value> {
+    let path = match value {
+        Value::Text(p) => p,
+        other => {
+            return Err(SixError::at(line, format!("process: a working directory must be text, not a {}", other.type_name())));
+        }
+    };
+    std::env::set_current_dir(Path::new(path))
+        .map_err(|e| SixError::at(line, format!("process: cannot change directory to {}: {}", path, e)))?;
+    Ok(Value::Empty)
+}
+
+/// `out(["process"] code)` — terminate the current Six process. On success this
+/// does not return.
+pub fn proc_exit(value: &Value, line: usize) -> Result<Value> {
+    let code = match value {
+        Value::Number(n) if n.fract() == 0.0 && *n >= 0.0 && *n <= i32::MAX as f64 => *n as i32,
+        Value::Number(_) => return Err(SixError::at(line, "process: exit status must be a non-negative integer")),
+        other => {
+            return Err(SixError::at(line, format!("process: exit status must be a number, not a {}", other.type_name())));
+        }
+    };
+    std::process::exit(code);
+}
+
+/// `open(["process" program args repr options?])` — spawn a child and build its
+/// runtime-backed Group `[["input" _] ["output" _] ["error" _]]`.
+pub fn spawn_child(items: &[Value], line: usize) -> Result<Value> {
+    if items.len() < 4 || items.len() > 5 {
+        return Err(SixError::at(
+            line,
+            "open expects a child process descriptor [\"process\" program arguments representation options?]",
+        ));
+    }
+    let program = match &items[1] {
+        Value::Text(s) => s.clone(),
+        other => return Err(SixError::at(line, format!("process: program must be text, not a {}", other.type_name()))),
+    };
+    let args = match &items[2] {
+        Value::Group(g) => {
+            let mut out = Vec::new();
+            for a in g.items.borrow().iter() {
+                match a {
+                    Value::Text(s) => out.push(s.clone()),
+                    other => {
+                        return Err(SixError::at(line, format!("process: each argument must be text, not a {}", other.type_name())));
+                    }
+                }
+            }
+            out
+        }
+        other => return Err(SixError::at(line, format!("process: arguments must be a Group of text, not a {}", other.type_name()))),
+    };
+    let mode = parse_repr(items, 3, line)?;
+
+    let mut cmd = Command::new(&program);
+    cmd.args(&args);
+    if let Some(opt) = items.get(4) {
+        apply_child_options(&mut cmd, opt, line)?;
+    }
+    cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+
+    let mut child = cmd.spawn().map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            SixError::at(line, format!("process: program not found: {}", program))
+        } else {
+            SixError::at(line, format!("process: cannot start {}: {}", program, e))
+        }
+    })?;
+    // With piped stdio these are always present.
+    let stdin = child.stdin.take().expect("piped stdin");
+    let stdout = child.stdout.take().expect("piped stdout");
+    let stderr = child.stderr.take().expect("piped stderr");
+
+    let g_in = crate::value::new_relationship(Vec::new(), Assoc::ChildInput(ChildIn { stream: stdin, mode }));
+    let g_out =
+        crate::value::new_relationship(Vec::new(), Assoc::ChildOutput(ChildOut { stream: stdout, mode, buf: Vec::new() }));
+    let g_err =
+        crate::value::new_relationship(Vec::new(), Assoc::ChildError(ChildErr { stream: stderr, mode, buf: Vec::new() }));
+    let visible = vec![
+        pair("input", Value::Group(g_in)),
+        pair("output", Value::Group(g_out)),
+        pair("error", Value::Group(g_err)),
+    ];
+    Ok(Value::Group(crate::value::new_relationship(visible, Assoc::ChildProc(ChildProcState { child, status: None }))))
+}
+
+/// Apply the optional final option Group to a child `Command`. The only v1
+/// options are `["directory" path]` and `["environment" overrides]`; each must
+/// be a two-element keyed Group, names are unique.
+fn apply_child_options(cmd: &mut Command, opt: &Value, line: usize) -> Result<()> {
+    let opts = match opt {
+        Value::Group(g) => g.items.borrow().clone(),
+        other => return Err(SixError::at(line, format!("process: options must be a Group, not a {}", other.type_name()))),
+    };
+    let mut seen: HashSet<String> = HashSet::new();
+    for o in &opts {
+        let entry = match o {
+            Value::Group(g) => g.items.borrow().clone(),
+            other => return Err(SixError::at(line, format!("process: each option must be a two-element Group, not a {}", other.type_name()))),
+        };
+        if entry.len() != 2 {
+            return Err(SixError::at(line, "process: each option must be a two-element Group [name value]"));
+        }
+        let name = match &entry[0] {
+            Value::Text(s) => s.clone(),
+            other => return Err(SixError::at(line, format!("process: an option name must be text, not a {}", other.type_name()))),
+        };
+        if !seen.insert(name.clone()) {
+            return Err(SixError::at(line, format!("process: duplicate option \"{}\"", name)));
+        }
+        match name.as_str() {
+            "directory" => {
+                let path = match &entry[1] {
+                    Value::Text(p) => p.clone(),
+                    other => return Err(SixError::at(line, format!("process: the directory option needs text, not a {}", other.type_name()))),
+                };
+                cmd.current_dir(Path::new(&path));
+            }
+            "environment" => apply_child_env(cmd, &entry[1], line)?,
+            other => return Err(SixError::at(line, format!("process: unknown option \"{}\"", other))),
+        }
+    }
+    Ok(())
+}
+
+/// Apply an `environment` override Group to a child `Command`. The child starts
+/// from a snapshot of the current environment (the default `Command`
+/// inheritance); each `[name value]` sets (Text) or removes (`..`) a variable.
+fn apply_child_env(cmd: &mut Command, overrides: &Value, line: usize) -> Result<()> {
+    let entries = match overrides {
+        Value::Group(g) => g.items.borrow().clone(),
+        other => return Err(SixError::at(line, format!("process: environment overrides must be a Group, not a {}", other.type_name()))),
+    };
+    let mut seen: HashSet<String> = HashSet::new();
+    for e in &entries {
+        let kv = match e {
+            Value::Group(g) => g.items.borrow().clone(),
+            other => return Err(SixError::at(line, format!("process: each environment override must be a Group [name value], not a {}", other.type_name()))),
+        };
+        if kv.len() != 2 {
+            return Err(SixError::at(line, "process: each environment override must be a Group [name value]"));
+        }
+        let name = match &kv[0] {
+            Value::Text(s) => s.clone(),
+            other => return Err(SixError::at(line, format!("process: an environment name must be text, not a {}", other.type_name()))),
+        };
+        if !seen.insert(name.clone()) {
+            return Err(SixError::at(line, format!("process: duplicate environment override \"{}\"", name)));
+        }
+        match &kv[1] {
+            Value::Text(v) => {
+                cmd.env(&name, v);
+            }
+            Value::Empty => {
+                cmd.env_remove(&name);
+            }
+            other => return Err(SixError::at(line, format!("process: an environment value must be text or .., not a {}", other.type_name()))),
+        }
+    }
+    Ok(())
+}
+
+/// `in(child)` — block until the child terminates and return its stable result:
+/// a non-negative integer exit status, or `..` for signal/abnormal termination.
+pub fn child_wait(state: &mut ChildProcState, line: usize) -> Result<Value> {
+    if let Some(v) = &state.status {
+        return Ok(v.clone());
+    }
+    let status = state
+        .child
+        .wait()
+        .map_err(|e| SixError::at(line, format!("process: waiting for the child failed: {}", e)))?;
+    let result = match status.code() {
+        Some(c) if c >= 0 => Value::Number(c as f64),
+        _ => Value::Empty,
+    };
+    state.status = Some(result.clone());
+    Ok(result)
+}
+
+/// `out(child ..)` — request child termination. Only `..` is accepted; success
+/// returns `..` and does not assert the child has already exited.
+pub fn child_terminate(state: &mut ChildProcState, value: &Value, line: usize) -> Result<Value> {
+    if !value.is_empty() {
+        return Err(SixError::at(line, "process: the only output to a child relationship is .. (terminate)"));
+    }
+    // An already-exited child makes kill() an error on some platforms; that is
+    // success here — termination is the goal.
+    match state.child.kill() {
+        Ok(()) => Ok(Value::Empty),
+        Err(e) if e.kind() == std::io::ErrorKind::InvalidInput => Ok(Value::Empty),
+        Err(e) => Err(SixError::at(line, format!("process: cannot terminate the child: {}", e))),
+    }
+}
+
+/// `out(child["input"] value)` — write to the child's stdin; returns `..`.
+pub fn child_in_write(c: &mut ChildIn, value: &Value, line: usize) -> Result<Value> {
+    let bytes = payload_bytes(value, c.mode, line)?;
+    c.stream
+        .write_all(&bytes)
+        .map_err(|e| SixError::at(line, format!("process: writing to the child failed: {}", e)))?;
+    let _ = c.stream.flush();
+    Ok(Value::Empty)
+}
+
+/// Read one chunk from a child output/error stream according to `mode`
+/// (Addendum C.15–C.18): non-empty Text or byte Group, or `..` at EOF.
+fn read_child_stream(stream: &mut dyn Read, mode: Repr, buf: &mut Vec<u8>, line: usize) -> Result<Value> {
+    match mode {
+        Repr::Binary => {
+            let mut chunk = [0u8; 4096];
+            let n = stream
+                .read(&mut chunk)
+                .map_err(|e| SixError::at(line, format!("process: reading from the child failed: {}", e)))?;
+            if n == 0 {
+                return Ok(Value::Empty);
+            }
+            Ok(Value::new_group(chunk[..n].iter().map(|b| byte(*b)).collect()))
+        }
+        Repr::Text => loop {
+            if let Some(text) = take_valid_utf8(buf, line)? {
+                return Ok(Value::Text(text));
+            }
+            let mut chunk = [0u8; 4096];
+            let n = stream
+                .read(&mut chunk)
+                .map_err(|e| SixError::at(line, format!("process: reading from the child failed: {}", e)))?;
+            if n == 0 {
+                if buf.is_empty() {
+                    return Ok(Value::Empty);
+                }
+                return Err(SixError::at(line, "process: child output ended in the middle of a UTF-8 character"));
+            }
+            buf.extend_from_slice(&chunk[..n]);
+        },
+    }
+}
+
+/// `in(child["output"])`.
+pub fn child_out_read(c: &mut ChildOut, line: usize) -> Result<Value> {
+    read_child_stream(&mut c.stream, c.mode, &mut c.buf, line)
+}
+
+/// `in(child["error"])`.
+pub fn child_err_read(c: &mut ChildErr, line: usize) -> Result<Value> {
+    read_child_stream(&mut c.stream, c.mode, &mut c.buf, line)
 }
 
 // --- secure OS randomness ---------------------------------------------------

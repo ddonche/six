@@ -34,17 +34,17 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Some("run") => match rest.get(1) {
-            Some(path) => run_file(path),
+            Some(path) => run_file(path, &rest[2..]),
             None => {
                 eprintln!("six: 'run' needs a file path");
                 ExitCode::FAILURE
             }
         },
-        Some(path) => run_file(path),
+        Some(path) => run_file(path, &rest[1..]),
     }
 }
 
-fn run_file(path: &str) -> ExitCode {
+fn run_file(path: &str, program_args: &[String]) -> ExitCode {
     let source = match std::fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) => {
@@ -62,6 +62,7 @@ fn run_file(path: &str) -> ExitCode {
     };
 
     let mut interp = Interpreter::new();
+    interp.set_args(program_args.to_vec());
     if let Some(dir) = std::path::Path::new(path).parent() {
         if !dir.as_os_str().is_empty() {
             interp.set_base_dir(dir.to_path_buf());
