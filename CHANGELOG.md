@@ -3,6 +3,21 @@
 Every fix or feature bumps the version — including REPL changes. `six --version`,
 the REPL banner, and `six --help` all report it.
 
+## v0.1.6
+- Host I/O file domain (Addendum A). Direct, one-shot in/out (no open/close):
+  - ["file" path "text"] / ["file" path "binary"] read and write complete
+    contents; missing path -> .., invalid UTF-8 / bad byte -> error.
+  - ["file" path] with .. removes an entry (non-empty directory -> error;
+    already absent -> success).
+  - ["file" path "directory"]: in lists entry names (no "."/".."); out [] creates
+    (parent must exist, target must not).
+  - ["file" path "metadata"]: keyed Group {kind,size,modified,created,readonly};
+    unavailable fields / directory size -> ...
+  - ["file" source "path"] renames/moves via the host's native rename; target
+    must not already exist; cross-device is an error (never copy+delete).
+  - Note: per frozen Addendum A the file domain has no open/close; the middle
+    doc's persistent-file-via-open form is superseded (flagged for review).
+
 ## v0.1.5
 - Host I/O foundation (phases 1-3, 7 of the host model):
   - Hidden host association bound to Group identity (Box<Assoc> on GroupData).

@@ -701,15 +701,22 @@ impl Interpreter {
                 )),
             };
         }
-        // An ordinary descriptor: establish a relationship by domain (later).
-        Err(self.descriptor_unsupported(&g, "open", line))
+        // An ordinary descriptor: establish a relationship by domain.
+        let items: Vec<Value> = g.items.borrow().iter().cloned().collect();
+        match domain_of(&items) {
+            Some("file") => Err(SixError::at(line, "open: the file domain is one-shot — use in/out, not open")),
+            Some(d @ ("network" | "process" | "device")) => {
+                Err(SixError::at(line, format!("open: the '{}' domain is not implemented yet in this build", d)))
+            }
+            _ => Err(SixError::at(line, "open: not a recognized host descriptor")),
+        }
     }
 
     pub fn host_in(&mut self, target: &Value, line: usize) -> Result<Value> {
         let g = self.as_host_group(target, "in", line)?;
         let kind = self.assoc_kind(&g);
         match kind {
-            AssocKind::None => Err(self.descriptor_unsupported(&g, "in", line)),
+            AssocKind::None => self.descriptor_in(&g, line),
             AssocKind::Closed => Err(SixError::at(line, "in: relationship is closed")),
             AssocKind::RuntimeInput => self.read_runtime_input(line),
             AssocKind::RuntimeOutput => Err(SixError::at(line, "in: cannot read from the output channel")),
@@ -717,11 +724,33 @@ impl Interpreter {
         }
     }
 
+    fn descriptor_in(&mut self, g: &GroupRef, line: usize) -> Result<Value> {
+        let items: Vec<Value> = g.items.borrow().iter().cloned().collect();
+        match domain_of(&items) {
+            Some("file") => crate::host::file_in(&items, line),
+            Some(d @ ("network" | "process" | "device")) => {
+                Err(SixError::at(line, format!("in: the '{}' domain is not implemented yet in this build", d)))
+            }
+            _ => Err(SixError::at(line, "in: not a host relationship, and not a recognized descriptor")),
+        }
+    }
+
+    fn descriptor_out(&mut self, g: &GroupRef, value: &Value, line: usize) -> Result<Value> {
+        let items: Vec<Value> = g.items.borrow().iter().cloned().collect();
+        match domain_of(&items) {
+            Some("file") => crate::host::file_out(&items, value, line),
+            Some(d @ ("network" | "process" | "device")) => {
+                Err(SixError::at(line, format!("out: the '{}' domain is not implemented yet in this build", d)))
+            }
+            _ => Err(SixError::at(line, "out: not a host relationship, and not a recognized descriptor")),
+        }
+    }
+
     pub fn host_out(&mut self, target: &Value, value: &Value, line: usize) -> Result<Value> {
         let g = self.as_host_group(target, "out", line)?;
         let kind = self.assoc_kind(&g);
         match kind {
-            AssocKind::None => Err(self.descriptor_unsupported(&g, "out", line)),
+            AssocKind::None => self.descriptor_out(&g, value, line),
             AssocKind::Closed => Err(SixError::at(line, "out: relationship is closed")),
             AssocKind::RuntimeInput => Err(SixError::at(line, "out: cannot write to the input channel")),
             AssocKind::RuntimeOutput => self.write_channel(value, false, line),
@@ -766,25 +795,6 @@ impl Interpreter {
                 crate::host::Assoc::RuntimeOutput => AssocKind::RuntimeOutput,
                 crate::host::Assoc::RuntimeError => AssocKind::RuntimeError,
             },
-        }
-    }
-
-    /// A descriptor whose domain is not yet implemented in this phase.
-    fn descriptor_unsupported(&self, g: &GroupRef, prim: &str, line: usize) -> SixError {
-        let domain = g
-            .items
-            .borrow()
-            .first()
-            .and_then(|v| if let Value::Text(s) = v { Some(s.clone()) } else { None });
-        match domain.as_deref() {
-            Some(d @ ("file" | "network" | "process" | "device")) => SixError::at(
-                line,
-                format!("{}: the '{}' domain is not implemented yet in this build", prim, d),
-            ),
-            _ => SixError::at(
-                line,
-                format!("{}: not a host relationship, and not a recognized descriptor", prim),
-            ),
         }
     }
 
@@ -834,6 +844,14 @@ impl Interpreter {
             }
             // Only an incomplete character so far — read more.
         }
+    }
+}
+
+/// The domain of a descriptor Group — its first member as text.
+fn domain_of(items: &[Value]) -> Option<&str> {
+    match items.first() {
+        Some(Value::Text(s)) => Some(s.as_str()),
+        _ => None,
     }
 }
 
