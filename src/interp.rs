@@ -33,6 +33,10 @@ pub struct Interpreter {
     pub global: Env,
     out: Box<dyn Write>,
     err: Box<dyn Write>,
+    /// The backing source for the runtime input channel. `new()` uses real
+    /// stdin; captured/test interpreters use an empty (EOF) source so a program
+    /// reading `in(input)` never blocks on the harness's stdin.
+    inp: Box<dyn io::Read>,
     /// Bytes read from the runtime input channel that did not yet form a
     /// complete UTF-8 character; carried to the next `in(input)`.
     stdin_pending: Vec<u8>,
@@ -46,21 +50,24 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Self {
-        Self::build(Box::new(io::stdout()), Box::new(io::stderr()))
+        Self::build(Box::new(io::stdout()), Box::new(io::stderr()), Box::new(io::stdin()))
     }
 
     /// Build an interpreter that writes program output to an in-memory buffer,
-    /// used by the test suite. Diagnostics go to stderr.
+    /// used by the test suite. Diagnostics go to stderr. Runtime input is an
+    /// empty (EOF) source so a captured program never blocks on the harness's
+    /// real stdin.
     pub fn with_writer(out: Box<dyn Write>) -> Self {
-        Self::build(out, Box::new(io::stderr()))
+        Self::build(out, Box::new(io::stderr()), Box::new(io::empty()))
     }
 
     /// Build an interpreter capturing both the output and error channels.
+    /// Runtime input is an empty (EOF) source.
     pub fn with_writers(out: Box<dyn Write>, err: Box<dyn Write>) -> Self {
-        Self::build(out, err)
+        Self::build(out, err, Box::new(io::empty()))
     }
 
-    fn build(out: Box<dyn Write>, err: Box<dyn Write>) -> Self {
+    fn build(out: Box<dyn Write>, err: Box<dyn Write>, inp: Box<dyn io::Read>) -> Self {
         let builtins = Scope::new_global();
         {
             let store = builtins.borrow().store();
@@ -75,6 +82,7 @@ impl Interpreter {
             global,
             out,
             err,
+            inp,
             stdin_pending: Vec::new(),
             base_dir: PathBuf::from("."),
             modules: HashMap::new(),
@@ -881,7 +889,7 @@ impl Interpreter {
                     return Ok(Value::Text(text));
                 }
             }
-            let n = io::stdin()
+            let n = self.inp
                 .read(&mut chunk)
                 .map_err(|e| SixError::at(line, format!("in: host input read failed: {}", e)))?;
             if n == 0 {
