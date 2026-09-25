@@ -32,6 +32,10 @@ pub struct Interpreter {
     builtins: Env,
     pub global: Env,
     out: Box<dyn Write>,
+    err: Box<dyn Write>,
+    /// Bytes read from the runtime input channel that did not yet form a
+    /// complete UTF-8 character; carried to the next `in(input)`.
+    stdin_pending: Vec<u8>,
     /// Directory that `@name` imports resolve against (the importing file's
     /// directory). Saved and restored around each module evaluation.
     base_dir: PathBuf,
@@ -42,16 +46,21 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Self {
-        Self::build(Box::new(io::stdout()))
+        Self::build(Box::new(io::stdout()), Box::new(io::stderr()))
     }
 
     /// Build an interpreter that writes program output to an in-memory buffer,
-    /// used by the test suite.
+    /// used by the test suite. Diagnostics go to stderr.
     pub fn with_writer(out: Box<dyn Write>) -> Self {
-        Self::build(out)
+        Self::build(out, Box::new(io::stderr()))
     }
 
-    fn build(out: Box<dyn Write>) -> Self {
+    /// Build an interpreter capturing both the output and error channels.
+    pub fn with_writers(out: Box<dyn Write>, err: Box<dyn Write>) -> Self {
+        Self::build(out, err)
+    }
+
+    fn build(out: Box<dyn Write>, err: Box<dyn Write>) -> Self {
         let builtins = Scope::new_global();
         {
             let store = builtins.borrow().store();
@@ -61,12 +70,32 @@ impl Interpreter {
             }
         }
         let global = Scope::child(&builtins);
-        Interpreter {
+        let interp = Interpreter {
             builtins,
             global,
             out,
+            err,
+            stdin_pending: Vec::new(),
             base_dir: PathBuf::from("."),
             modules: HashMap::new(),
+        };
+        interp.install_channels();
+        interp
+    }
+
+    /// Pre-bind the three runtime channels `input`, `output`, `error` in the
+    /// global scope as runtime-backed Groups, before any user code runs.
+    fn install_channels(&self) {
+        use crate::host::Assoc;
+        let global = self.global.borrow().store();
+        let mut items = global.items.borrow_mut();
+        for (name, assoc) in [
+            ("input", Assoc::RuntimeInput),
+            ("output", Assoc::RuntimeOutput),
+            ("error", Assoc::RuntimeError),
+        ] {
+            let channel = Value::Group(crate::value::new_relationship(Vec::new(), assoc));
+            items.push(Value::new_group(vec![Value::Text(name.to_string()), channel]));
         }
     }
 
@@ -90,10 +119,12 @@ impl Interpreter {
     }
 
     /// Clear every top-level binding and the module cache — a full session
-    /// reset. Builtins (in the parent scope) remain.
+    /// reset. Builtins (in the parent scope) remain, and the runtime channels
+    /// are re-established so the session stays usable.
     pub fn clear_all(&mut self) {
         self.global.borrow().store().items.borrow_mut().clear();
         self.modules.clear();
+        self.install_channels();
     }
 
     /// Run a whole program. Returns the value of its final statement.
@@ -649,6 +680,199 @@ impl Interpreter {
     fn call_builtin(&mut self, name: &str, args: Vec<Value>, line: usize) -> Result<Value> {
         crate::builtins::dispatch(self, name, args, line)
     }
+
+    // --- host primitives: open / in / out / close ---------------------------
+    //
+    // Central dispatch. A target is either a live runtime-backed Group (dispatch
+    // by its association's capabilities) or an ordinary host descriptor Group
+    // (dispatch by domain). Domains other than the runtime channels land in
+    // later phases and currently report a clear "not yet supported" error.
+
+    pub fn host_open(&mut self, target: &Value, line: usize) -> Result<Value> {
+        let g = self.as_host_group(target, "open", line)?;
+        if let Some(assoc) = &*g.assoc.borrow() {
+            return match **assoc {
+                crate::host::Assoc::Closed => Err(SixError::at(line, "open: relationship is closed")),
+                // No current relationship establishes a subordinate relationship
+                // yet (TCP listeners arrive with the network domain).
+                _ => Err(SixError::at(
+                    line,
+                    format!("open: the {} does not establish a subordinate relationship", assoc.describe()),
+                )),
+            };
+        }
+        // An ordinary descriptor: establish a relationship by domain (later).
+        Err(self.descriptor_unsupported(&g, "open", line))
+    }
+
+    pub fn host_in(&mut self, target: &Value, line: usize) -> Result<Value> {
+        let g = self.as_host_group(target, "in", line)?;
+        let kind = self.assoc_kind(&g);
+        match kind {
+            AssocKind::None => Err(self.descriptor_unsupported(&g, "in", line)),
+            AssocKind::Closed => Err(SixError::at(line, "in: relationship is closed")),
+            AssocKind::RuntimeInput => self.read_runtime_input(line),
+            AssocKind::RuntimeOutput => Err(SixError::at(line, "in: cannot read from the output channel")),
+            AssocKind::RuntimeError => Err(SixError::at(line, "in: cannot read from the error channel")),
+        }
+    }
+
+    pub fn host_out(&mut self, target: &Value, value: &Value, line: usize) -> Result<Value> {
+        let g = self.as_host_group(target, "out", line)?;
+        let kind = self.assoc_kind(&g);
+        match kind {
+            AssocKind::None => Err(self.descriptor_unsupported(&g, "out", line)),
+            AssocKind::Closed => Err(SixError::at(line, "out: relationship is closed")),
+            AssocKind::RuntimeInput => Err(SixError::at(line, "out: cannot write to the input channel")),
+            AssocKind::RuntimeOutput => self.write_channel(value, false, line),
+            AssocKind::RuntimeError => self.write_channel(value, true, line),
+        }
+    }
+
+    pub fn host_close(&mut self, target: &Value, line: usize) -> Result<Value> {
+        let g = self.as_host_group(target, "close", line)?;
+        let kind = self.assoc_kind(&g);
+        match kind {
+            AssocKind::None => Err(SixError::at(
+                line,
+                "close: not a host relationship (a descriptor or deep copy has no relationship to close)",
+            )),
+            AssocKind::Closed => Err(SixError::at(line, "close: relationship is already closed")),
+            // Runtime channels: releasing the Six-visible relationship is a
+            // marker flip; the runtime need not close OS descriptors 0/1/2.
+            AssocKind::RuntimeInput | AssocKind::RuntimeOutput | AssocKind::RuntimeError => {
+                *g.assoc.borrow_mut() = Some(Box::new(crate::host::Assoc::Closed));
+                Ok(Value::Empty)
+            }
+        }
+    }
+
+    fn as_host_group(&self, target: &Value, prim: &str, line: usize) -> Result<GroupRef> {
+        match target {
+            Value::Group(g) => Ok(g.clone()),
+            other => Err(SixError::at(
+                line,
+                format!("{} expects a host descriptor or relationship (a Group), not a {}", prim, other.type_name()),
+            )),
+        }
+    }
+
+    fn assoc_kind(&self, g: &GroupRef) -> AssocKind {
+        match &*g.assoc.borrow() {
+            None => AssocKind::None,
+            Some(a) => match **a {
+                crate::host::Assoc::Closed => AssocKind::Closed,
+                crate::host::Assoc::RuntimeInput => AssocKind::RuntimeInput,
+                crate::host::Assoc::RuntimeOutput => AssocKind::RuntimeOutput,
+                crate::host::Assoc::RuntimeError => AssocKind::RuntimeError,
+            },
+        }
+    }
+
+    /// A descriptor whose domain is not yet implemented in this phase.
+    fn descriptor_unsupported(&self, g: &GroupRef, prim: &str, line: usize) -> SixError {
+        let domain = g
+            .items
+            .borrow()
+            .first()
+            .and_then(|v| if let Value::Text(s) = v { Some(s.clone()) } else { None });
+        match domain.as_deref() {
+            Some(d @ ("file" | "network" | "process" | "device")) => SixError::at(
+                line,
+                format!("{}: the '{}' domain is not implemented yet in this build", prim, d),
+            ),
+            _ => SixError::at(
+                line,
+                format!("{}: not a host relationship, and not a recognized descriptor", prim),
+            ),
+        }
+    }
+
+    /// Write Six Text to the output (or error) channel. Adds no newline.
+    fn write_channel(&mut self, value: &Value, is_err: bool, line: usize) -> Result<Value> {
+        let text = match value {
+            Value::Text(s) => s.clone(),
+            other => {
+                return Err(SixError::at(
+                    line,
+                    format!("out: the output/error channel accepts only text, not a {}", other.type_name()),
+                ));
+            }
+        };
+        let w: &mut dyn Write = if is_err { &mut self.err } else { &mut self.out };
+        w.write_all(text.as_bytes())
+            .map_err(|e| SixError::at(line, format!("out: host write failed: {}", e)))?;
+        let _ = w.flush();
+        Ok(Value::Empty)
+    }
+
+    /// `in(input)` — read the next chunk of runtime input as Six Text, buffering
+    /// an incomplete trailing UTF-8 sequence; `..` at EOF.
+    fn read_runtime_input(&mut self, line: usize) -> Result<Value> {
+        use std::io::Read;
+        let mut chunk = [0u8; 4096];
+        loop {
+            // Try to decode what we already have buffered first.
+            if !self.stdin_pending.is_empty() {
+                if let Some(text) = take_valid_utf8(&mut self.stdin_pending, line)? {
+                    return Ok(Value::Text(text));
+                }
+            }
+            let n = io::stdin()
+                .read(&mut chunk)
+                .map_err(|e| SixError::at(line, format!("in: host input read failed: {}", e)))?;
+            if n == 0 {
+                // EOF.
+                if self.stdin_pending.is_empty() {
+                    return Ok(Value::Empty);
+                }
+                return Err(SixError::at(line, "in: input ended in the middle of a UTF-8 character"));
+            }
+            self.stdin_pending.extend_from_slice(&chunk[..n]);
+            if let Some(text) = take_valid_utf8(&mut self.stdin_pending, line)? {
+                return Ok(Value::Text(text));
+            }
+            // Only an incomplete character so far — read more.
+        }
+    }
+}
+
+/// A flattened view of a Group's association kind, so dispatch can borrow the
+/// association briefly and then act without holding the `RefCell`.
+enum AssocKind {
+    None,
+    Closed,
+    RuntimeInput,
+    RuntimeOutput,
+    RuntimeError,
+}
+
+/// Split the longest valid UTF-8 prefix out of `buf`, leaving any incomplete
+/// trailing bytes behind. Returns `None` when `buf` holds only an incomplete
+/// character. Errors on genuinely invalid UTF-8.
+fn take_valid_utf8(buf: &mut Vec<u8>, line: usize) -> Result<Option<String>> {
+    match std::str::from_utf8(buf) {
+        Ok(s) => {
+            if s.is_empty() {
+                return Ok(None);
+            }
+            let out = s.to_string();
+            buf.clear();
+            Ok(Some(out))
+        }
+        Err(e) => {
+            if e.error_len().is_some() {
+                return Err(SixError::at(line, "in: input was not valid UTF-8"));
+            }
+            let valid = e.valid_up_to();
+            if valid == 0 {
+                return Ok(None);
+            }
+            let out = String::from_utf8(buf[..valid].to_vec()).unwrap();
+            buf.drain(..valid);
+            Ok(Some(out))
+        }
+    }
 }
 
 impl Flow {
@@ -677,9 +901,10 @@ pub const BUILTINS: &[&str] = &[
     // not capabilities — the shared callable machinery is an implementation
     // detail of the language model).
     "number", "text",
-    // Host observations. The rest of the host surface (open/in/out/close and the
-    // runtime channels input/output/error) lands in later phases.
+    // Host observations.
     "entropy", "time",
+    // Host relationship & information-flow primitives.
+    "open", "in", "out", "close",
 ];
 
 /// The value of the `["key" value]` pair at `idx` in a store/Group (clone of

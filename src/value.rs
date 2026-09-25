@@ -19,11 +19,16 @@ use std::rc::Rc;
 use crate::ast::FuncDef;
 
 /// The shared, mutable backing store of a Group, with an immutability latch set
-/// when the Group is first bound to an uppercase (immutable) name.
+/// when the Group is first bound to an uppercase (immutable) name, and an
+/// optional hidden host association bound to this Group's identity (see
+/// [`crate::host::Assoc`]). The association lives here, on the `Rc`-shared
+/// identity, never in `items` — so aliasing shares it and `::` deep-copy (which
+/// builds a fresh `GroupData`) strips it.
 #[derive(Debug)]
 pub struct GroupData {
     pub items: RefCell<Vec<Value>>,
     pub immutable: Cell<bool>,
+    pub assoc: RefCell<Option<Box<crate::host::Assoc>>>,
 }
 
 pub type GroupRef = Rc<GroupData>;
@@ -106,9 +111,22 @@ impl Value {
     }
 }
 
-/// Build a fresh Group backing store.
+/// Build a fresh Group backing store (no host association).
 pub fn new_group_ref(items: Vec<Value>) -> GroupRef {
-    Rc::new(GroupData { items: RefCell::new(items), immutable: Cell::new(false) })
+    Rc::new(GroupData {
+        items: RefCell::new(items),
+        immutable: Cell::new(false),
+        assoc: RefCell::new(None),
+    })
+}
+
+/// Build a fresh Group carrying a hidden host association (a live relationship).
+pub fn new_relationship(items: Vec<Value>, assoc: crate::host::Assoc) -> GroupRef {
+    Rc::new(GroupData {
+        items: RefCell::new(items),
+        immutable: Cell::new(false),
+        assoc: RefCell::new(Some(Box::new(assoc))),
+    })
 }
 
 // --- environment ------------------------------------------------------------

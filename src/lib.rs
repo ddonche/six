@@ -67,6 +67,35 @@ pub fn run_capture(source: &str) -> Result<(Value, String)> {
     Ok((value, text))
 }
 
+/// Run Six `source`, capturing the output channel and the error channel
+/// separately as `(value, output, error)`.
+pub fn run_capture_io(source: &str) -> Result<(Value, String, String)> {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    #[derive(Clone)]
+    struct SharedBuf(Rc<RefCell<Vec<u8>>>);
+    impl std::io::Write for SharedBuf {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.borrow_mut().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let program = parse(source)?;
+    let out_buf = Rc::new(RefCell::new(Vec::new()));
+    let err_buf = Rc::new(RefCell::new(Vec::new()));
+    let mut interp =
+        Interpreter::with_writers(Box::new(SharedBuf(out_buf.clone())), Box::new(SharedBuf(err_buf.clone())));
+    let value = interp.run(&program)?;
+    let out = String::from_utf8_lossy(&out_buf.borrow()).into_owned();
+    let err = String::from_utf8_lossy(&err_buf.borrow()).into_owned();
+    Ok((value, out, err))
+}
+
 /// Run the Six program at `path`, resolving `@` imports relative to its
 /// directory, and capture everything it prints.
 pub fn run_file_capture(path: &std::path::Path) -> Result<(Value, String)> {

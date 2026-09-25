@@ -3,6 +3,20 @@
 Every fix or feature bumps the version — including REPL changes. `six --version`,
 the REPL banner, and `six --help` all report it.
 
+## v0.1.5
+- Host I/O foundation (phases 1-3, 7 of the host model):
+  - Hidden host association bound to Group identity (Box<Assoc> on GroupData).
+    Aliasing shares it; `::` deep-copy strips it; visible mutation never touches
+    it — the Runtime Association Law.
+  - The four host primitives open/in/out/close with central capability dispatch.
+  - The runtime channels input/output/error, pre-bound as runtime-backed Groups
+    before any user code (re-established after clear_all). input decodes UTF-8
+    (buffering split characters, `..` at EOF); output/error encode UTF-8 with no
+    automatic newline; the channels obey the association law and capability
+    rules (in(output), out(input …), open(input), etc. all error).
+  - print/input are still present during migration; their removal and the
+    file/network/process/device domains land in later phases.
+
 ## v0.1.4
 - Host I/O (phase 8 of the host model, landed first because it is independent):
   add the `entropy()` and `time(mode)` host primitives.

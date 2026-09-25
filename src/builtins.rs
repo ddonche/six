@@ -37,6 +37,22 @@ pub fn dispatch(interp: &mut Interpreter, name: &str, args: Vec<Value>, line: us
                 other => Err(SixError::at(line, format!("time mode must be text, not a {}", other.type_name()))),
             }
         }
+        "open" => {
+            arity("open", &args, 1, 1, line)?;
+            interp.host_open(&args[0], line)
+        }
+        "in" => {
+            arity("in", &args, 1, 1, line)?;
+            interp.host_in(&args[0], line)
+        }
+        "out" => {
+            arity("out", &args, 2, 2, line)?;
+            interp.host_out(&args[0], &args[1], line)
+        }
+        "close" => {
+            arity("close", &args, 1, 1, line)?;
+            interp.host_close(&args[0], line)
+        }
         _ => Err(SixError::at(line, format!("unknown builtin '{}'", name))),
     }
 }

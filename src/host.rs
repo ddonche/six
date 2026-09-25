@@ -13,6 +13,39 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use crate::error::{Result, SixError};
 use crate::value::Value;
 
+/// A hidden runtime association bound to a Group's *identity* (never to its
+/// visible contents). This is what turns an ordinary Group into a live host
+/// relationship. It is stored `Box`ed behind an `Option` on `GroupData`, so a
+/// plain Group carries only a null pointer's worth of overhead.
+///
+/// Aliasing shares the association (same `Rc<GroupData>`); `::` deep-copy makes
+/// a fresh `GroupData` with no association; visible mutation never touches it.
+#[derive(Debug)]
+pub enum Assoc {
+    /// The program's runtime input channel (`in` / `close`).
+    RuntimeInput,
+    /// The program's runtime output channel (`out` / `close`).
+    RuntimeOutput,
+    /// The program's runtime diagnostic channel (`out` / `close`).
+    RuntimeError,
+    /// A relationship that has been closed. Any further use is a runtime error;
+    /// closing again is a runtime error. Kept distinct from "no association" so
+    /// the error message can tell a closed relationship from a deep copy.
+    Closed,
+}
+
+impl Assoc {
+    /// A short human name for error messages.
+    pub fn describe(&self) -> &'static str {
+        match self {
+            Assoc::RuntimeInput => "input channel",
+            Assoc::RuntimeOutput => "output channel",
+            Assoc::RuntimeError => "error channel",
+            Assoc::Closed => "closed relationship",
+        }
+    }
+}
+
 /// 2^53 - 1 = 9,007,199,254,740,991 — every integer through here is exactly
 /// representable as an f64.
 const MAX_53: u64 = (1u64 << 53) - 1;
