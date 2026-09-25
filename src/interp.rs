@@ -689,38 +689,77 @@ impl Interpreter {
     // later phases and currently report a clear "not yet supported" error.
 
     pub fn host_open(&mut self, target: &Value, line: usize) -> Result<Value> {
+        use crate::host::Assoc;
         let g = self.as_host_group(target, "open", line)?;
-        if let Some(assoc) = &*g.assoc.borrow() {
-            return match **assoc {
-                crate::host::Assoc::Closed => Err(SixError::at(line, "open: relationship is closed")),
-                // No current relationship establishes a subordinate relationship
-                // yet (TCP listeners arrive with the network domain).
-                _ => Err(SixError::at(
-                    line,
-                    format!("open: the {} does not establish a subordinate relationship", assoc.describe()),
-                )),
-            };
+        {
+            let a = g.assoc.borrow();
+            match a.as_deref() {
+                None => {} // an ordinary descriptor — established below
+                Some(Assoc::Closed) => return Err(SixError::at(line, "open: relationship is closed")),
+                Some(Assoc::TcpListener(_)) => {
+                    drop(a);
+                    return self.accept_listener(&g, line);
+                }
+                Some(other) => {
+                    return Err(SixError::at(
+                        line,
+                        format!("open: the {} does not establish a subordinate relationship", other.describe()),
+                    ));
+                }
+            }
         }
-        // An ordinary descriptor: establish a relationship by domain.
         let items: Vec<Value> = g.items.borrow().iter().cloned().collect();
         match domain_of(&items) {
             Some("file") => Err(SixError::at(line, "open: the file domain is one-shot — use in/out, not open")),
-            Some(d @ ("network" | "process" | "device")) => {
+            Some("network") => {
+                let assoc = crate::host::net_open(&items, line)?;
+                Ok(Value::Group(crate::value::new_relationship(Vec::new(), assoc)))
+            }
+            Some(d @ ("process" | "device")) => {
                 Err(SixError::at(line, format!("open: the '{}' domain is not implemented yet in this build", d)))
             }
             _ => Err(SixError::at(line, "open: not a recognized host descriptor")),
         }
     }
 
+    fn accept_listener(&mut self, g: &GroupRef, line: usize) -> Result<Value> {
+        use crate::host::Assoc;
+        let mut a = g.assoc.borrow_mut();
+        match a.as_deref_mut() {
+            Some(Assoc::TcpListener(l)) => {
+                let conn = crate::host::tcp_accept(l, line)?;
+                Ok(Value::Group(crate::value::new_relationship(Vec::new(), conn)))
+            }
+            _ => unreachable!("accept_listener called on a non-listener"),
+        }
+    }
+
     pub fn host_in(&mut self, target: &Value, line: usize) -> Result<Value> {
+        use crate::host::Assoc;
         let g = self.as_host_group(target, "in", line)?;
-        let kind = self.assoc_kind(&g);
-        match kind {
-            AssocKind::None => self.descriptor_in(&g, line),
-            AssocKind::Closed => Err(SixError::at(line, "in: relationship is closed")),
-            AssocKind::RuntimeInput => self.read_runtime_input(line),
-            AssocKind::RuntimeOutput => Err(SixError::at(line, "in: cannot read from the output channel")),
-            AssocKind::RuntimeError => Err(SixError::at(line, "in: cannot read from the error channel")),
+        {
+            let a = g.assoc.borrow();
+            match a.as_deref() {
+                None => {
+                    drop(a);
+                    return self.descriptor_in(&g, line);
+                }
+                Some(Assoc::Closed) => return Err(SixError::at(line, "in: relationship is closed")),
+                Some(Assoc::RuntimeInput) => {
+                    drop(a);
+                    return self.read_runtime_input(line);
+                }
+                Some(Assoc::RuntimeOutput) => return Err(SixError::at(line, "in: cannot read from the output channel")),
+                Some(Assoc::RuntimeError) => return Err(SixError::at(line, "in: cannot read from the error channel")),
+                Some(Assoc::TcpListener(_)) => return Err(SixError::at(line, "in: a TCP listener does not support in")),
+                Some(Assoc::Tcp(_)) | Some(Assoc::Udp(_)) => {}
+            }
+        }
+        let mut a = g.assoc.borrow_mut();
+        match a.as_deref_mut() {
+            Some(Assoc::Tcp(c)) => crate::host::tcp_in(c, line),
+            Some(Assoc::Udp(u)) => crate::host::udp_in(u, line),
+            _ => unreachable!(),
         }
     }
 
@@ -728,7 +767,8 @@ impl Interpreter {
         let items: Vec<Value> = g.items.borrow().iter().cloned().collect();
         match domain_of(&items) {
             Some("file") => crate::host::file_in(&items, line),
-            Some(d @ ("network" | "process" | "device")) => {
+            Some("network") => Err(SixError::at(line, "in: open a network relationship first with open(...)")),
+            Some(d @ ("process" | "device")) => {
                 Err(SixError::at(line, format!("in: the '{}' domain is not implemented yet in this build", d)))
             }
             _ => Err(SixError::at(line, "in: not a host relationship, and not a recognized descriptor")),
@@ -739,7 +779,8 @@ impl Interpreter {
         let items: Vec<Value> = g.items.borrow().iter().cloned().collect();
         match domain_of(&items) {
             Some("file") => crate::host::file_out(&items, value, line),
-            Some(d @ ("network" | "process" | "device")) => {
+            Some("network") => Err(SixError::at(line, "out: open a network relationship first with open(...)")),
+            Some(d @ ("process" | "device")) => {
                 Err(SixError::at(line, format!("out: the '{}' domain is not implemented yet in this build", d)))
             }
             _ => Err(SixError::at(line, "out: not a host relationship, and not a recognized descriptor")),
@@ -747,33 +788,57 @@ impl Interpreter {
     }
 
     pub fn host_out(&mut self, target: &Value, value: &Value, line: usize) -> Result<Value> {
+        use crate::host::Assoc;
         let g = self.as_host_group(target, "out", line)?;
-        let kind = self.assoc_kind(&g);
-        match kind {
-            AssocKind::None => self.descriptor_out(&g, value, line),
-            AssocKind::Closed => Err(SixError::at(line, "out: relationship is closed")),
-            AssocKind::RuntimeInput => Err(SixError::at(line, "out: cannot write to the input channel")),
-            AssocKind::RuntimeOutput => self.write_channel(value, false, line),
-            AssocKind::RuntimeError => self.write_channel(value, true, line),
+        {
+            let a = g.assoc.borrow();
+            match a.as_deref() {
+                None => {
+                    drop(a);
+                    return self.descriptor_out(&g, value, line);
+                }
+                Some(Assoc::Closed) => return Err(SixError::at(line, "out: relationship is closed")),
+                Some(Assoc::RuntimeInput) => return Err(SixError::at(line, "out: cannot write to the input channel")),
+                Some(Assoc::RuntimeOutput) => {
+                    drop(a);
+                    return self.write_channel(value, false, line);
+                }
+                Some(Assoc::RuntimeError) => {
+                    drop(a);
+                    return self.write_channel(value, true, line);
+                }
+                Some(Assoc::TcpListener(_)) => return Err(SixError::at(line, "out: a TCP listener does not support out")),
+                Some(Assoc::Tcp(_)) | Some(Assoc::Udp(_)) => {}
+            }
+        }
+        let mut a = g.assoc.borrow_mut();
+        match a.as_deref_mut() {
+            Some(Assoc::Tcp(c)) => crate::host::tcp_out(c, value, line),
+            Some(Assoc::Udp(u)) => crate::host::udp_out(u, value, line),
+            _ => unreachable!(),
         }
     }
 
     pub fn host_close(&mut self, target: &Value, line: usize) -> Result<Value> {
+        use crate::host::Assoc;
         let g = self.as_host_group(target, "close", line)?;
-        let kind = self.assoc_kind(&g);
-        match kind {
-            AssocKind::None => Err(SixError::at(
-                line,
-                "close: not a host relationship (a descriptor or deep copy has no relationship to close)",
-            )),
-            AssocKind::Closed => Err(SixError::at(line, "close: relationship is already closed")),
-            // Runtime channels: releasing the Six-visible relationship is a
-            // marker flip; the runtime need not close OS descriptors 0/1/2.
-            AssocKind::RuntimeInput | AssocKind::RuntimeOutput | AssocKind::RuntimeError => {
-                *g.assoc.borrow_mut() = Some(Box::new(crate::host::Assoc::Closed));
-                Ok(Value::Empty)
+        {
+            let a = g.assoc.borrow();
+            match a.as_deref() {
+                None => {
+                    return Err(SixError::at(
+                        line,
+                        "close: not a host relationship (a descriptor or deep copy has no relationship to close)",
+                    ));
+                }
+                Some(Assoc::Closed) => return Err(SixError::at(line, "close: relationship is already closed")),
+                _ => {}
             }
         }
+        // Replacing with Closed drops the old association, which closes any OS
+        // handle it held (socket, etc.). Runtime channels are just a marker flip.
+        *g.assoc.borrow_mut() = Some(Box::new(crate::host::Assoc::Closed));
+        Ok(Value::Empty)
     }
 
     fn as_host_group(&self, target: &Value, prim: &str, line: usize) -> Result<GroupRef> {
@@ -783,18 +848,6 @@ impl Interpreter {
                 line,
                 format!("{} expects a host descriptor or relationship (a Group), not a {}", prim, other.type_name()),
             )),
-        }
-    }
-
-    fn assoc_kind(&self, g: &GroupRef) -> AssocKind {
-        match &*g.assoc.borrow() {
-            None => AssocKind::None,
-            Some(a) => match **a {
-                crate::host::Assoc::Closed => AssocKind::Closed,
-                crate::host::Assoc::RuntimeInput => AssocKind::RuntimeInput,
-                crate::host::Assoc::RuntimeOutput => AssocKind::RuntimeOutput,
-                crate::host::Assoc::RuntimeError => AssocKind::RuntimeError,
-            },
         }
     }
 
@@ -824,7 +877,7 @@ impl Interpreter {
         loop {
             // Try to decode what we already have buffered first.
             if !self.stdin_pending.is_empty() {
-                if let Some(text) = take_valid_utf8(&mut self.stdin_pending, line)? {
+                if let Some(text) = crate::host::take_valid_utf8(&mut self.stdin_pending, line)? {
                     return Ok(Value::Text(text));
                 }
             }
@@ -839,7 +892,7 @@ impl Interpreter {
                 return Err(SixError::at(line, "in: input ended in the middle of a UTF-8 character"));
             }
             self.stdin_pending.extend_from_slice(&chunk[..n]);
-            if let Some(text) = take_valid_utf8(&mut self.stdin_pending, line)? {
+            if let Some(text) = crate::host::take_valid_utf8(&mut self.stdin_pending, line)? {
                 return Ok(Value::Text(text));
             }
             // Only an incomplete character so far — read more.
@@ -855,43 +908,6 @@ fn domain_of(items: &[Value]) -> Option<&str> {
     }
 }
 
-/// A flattened view of a Group's association kind, so dispatch can borrow the
-/// association briefly and then act without holding the `RefCell`.
-enum AssocKind {
-    None,
-    Closed,
-    RuntimeInput,
-    RuntimeOutput,
-    RuntimeError,
-}
-
-/// Split the longest valid UTF-8 prefix out of `buf`, leaving any incomplete
-/// trailing bytes behind. Returns `None` when `buf` holds only an incomplete
-/// character. Errors on genuinely invalid UTF-8.
-fn take_valid_utf8(buf: &mut Vec<u8>, line: usize) -> Result<Option<String>> {
-    match std::str::from_utf8(buf) {
-        Ok(s) => {
-            if s.is_empty() {
-                return Ok(None);
-            }
-            let out = s.to_string();
-            buf.clear();
-            Ok(Some(out))
-        }
-        Err(e) => {
-            if e.error_len().is_some() {
-                return Err(SixError::at(line, "in: input was not valid UTF-8"));
-            }
-            let valid = e.valid_up_to();
-            if valid == 0 {
-                return Ok(None);
-            }
-            let out = String::from_utf8(buf[..valid].to_vec()).unwrap();
-            buf.drain(..valid);
-            Ok(Some(out))
-        }
-    }
-}
 
 impl Flow {
     /// Force a Flow to a concrete Value, performing a pending tail call if any.

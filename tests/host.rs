@@ -241,3 +241,144 @@ fn file_open_and_bare_in_are_rejected() {
     assert!(err(&format!("open([\"file\" {f} \"text\"])")).contains("one-shot"));
     assert!(err(&format!("in([\"file\" {f}])")).contains("not valid"));
 }
+
+// --- network domain (Addendum B) --------------------------------------------
+
+/// A unique loopback port per test (pid-based base avoids TIME_WAIT across runs).
+fn next_port() -> u16 {
+    static C: AtomicUsize = AtomicUsize::new(0);
+    let base = 20000 + (std::process::id() as usize % 20000);
+    (base + C.fetch_add(1, Ordering::SeqCst)) as u16
+}
+
+#[test]
+fn tcp_text_loopback_both_directions() {
+    let p = next_port();
+    let src = format!(
+        "l : open([\"network\" \"tcp\" \"listener\" \"127.0.0.1\" {p} \"text\"])\n\
+         c : open([\"network\" \"tcp\" \"127.0.0.1\" {p} \"text\"])\n\
+         s : open(l)\n\
+         out(c \"ping\")\n\
+         out(output in(s))\n\
+         out(s \"pong\")\n\
+         out(output in(c))\n\
+         close(c)\nclose(s)\nclose(l)"
+    );
+    assert_eq!(out(&src), "pingpong");
+}
+
+#[test]
+fn tcp_eof_is_empty() {
+    let p = next_port();
+    // Server accepts then closes; the client sees EOF (`..`), not "".
+    let src = format!(
+        "l : open([\"network\" \"tcp\" \"listener\" \"127.0.0.1\" {p} \"text\"])\n\
+         c : open([\"network\" \"tcp\" \"127.0.0.1\" {p} \"text\"])\n\
+         s : open(l)\n\
+         close(s)\n\
+         out(output text(in(c) == ..))\n\
+         close(c)\nclose(l)"
+    );
+    assert_eq!(out(&src), "true");
+}
+
+#[test]
+fn tcp_binary_round_trip() {
+    let p = next_port();
+    let src = format!(
+        "l : open([\"network\" \"tcp\" \"listener\" \"127.0.0.1\" {p} \"binary\"])\n\
+         c : open([\"network\" \"tcp\" \"127.0.0.1\" {p} \"binary\"])\n\
+         s : open(l)\n\
+         out(c [104 105])\n\
+         d : in(s)\n\
+         out(output text(d[0]) + \",\" + text(d[1]))\n\
+         close(c)\nclose(s)\nclose(l)"
+    );
+    assert_eq!(out(&src), "104,105");
+}
+
+#[test]
+fn tcp_listener_capabilities() {
+    let p = next_port();
+    // A listener supports open/close but not in/out.
+    let mk = |op: &str| {
+        format!(
+            "l : open([\"network\" \"tcp\" \"listener\" \"127.0.0.1\" {p} \"text\"])\n{op}"
+        )
+    };
+    assert!(err(&mk("in(l)")).contains("listener does not support in"));
+    assert!(err(&mk("out(l \"x\")")).contains("listener does not support out"));
+}
+
+#[test]
+fn tcp_connection_has_no_subordinate_open() {
+    let p = next_port();
+    let src = format!(
+        "l : open([\"network\" \"tcp\" \"listener\" \"127.0.0.1\" {p} \"text\"])\n\
+         c : open([\"network\" \"tcp\" \"127.0.0.1\" {p} \"text\"])\n\
+         open(c)"
+    );
+    assert!(err(&src).contains("does not establish a subordinate"));
+}
+
+#[test]
+fn accepted_connection_survives_listener_close() {
+    let p = next_port();
+    let src = format!(
+        "l : open([\"network\" \"tcp\" \"listener\" \"127.0.0.1\" {p} \"text\"])\n\
+         c : open([\"network\" \"tcp\" \"127.0.0.1\" {p} \"text\"])\n\
+         s : open(l)\n\
+         close(l)\n\
+         out(c \"still works\")\n\
+         out(output in(s))\n\
+         close(c)\nclose(s)"
+    );
+    assert_eq!(out(&src), "still works");
+}
+
+#[test]
+fn network_descriptor_must_be_opened() {
+    let p = next_port();
+    assert!(err(&format!("in([\"network\" \"tcp\" \"127.0.0.1\" {p} \"text\"])")).contains("open"));
+    assert!(err(&format!("out([\"network\" \"tcp\" \"127.0.0.1\" {p} \"text\"] \"x\")")).contains("open"));
+}
+
+#[test]
+fn udp_text_loopback_with_source() {
+    let a = next_port();
+    let b = next_port();
+    let src = format!(
+        "sa : open([\"network\" \"udp\" \"127.0.0.1\" {a} \"text\"])\n\
+         sb : open([\"network\" \"udp\" \"127.0.0.1\" {b} \"text\"])\n\
+         out(sa [\"127.0.0.1\" {b} \"hi udp\"])\n\
+         p : in(sb)\n\
+         out(output text(p[1]) + \":\" + p[2])\n\
+         close(sa)\nclose(sb)"
+    );
+    assert_eq!(out(&src), format!("{a}:hi udp"));
+}
+
+#[test]
+fn udp_binary_datagram() {
+    let a = next_port();
+    let b = next_port();
+    let src = format!(
+        "sa : open([\"network\" \"udp\" \"127.0.0.1\" {a} \"binary\"])\n\
+         sb : open([\"network\" \"udp\" \"127.0.0.1\" {b} \"binary\"])\n\
+         out(sa [\"127.0.0.1\" {b} [1 2 3]])\n\
+         p : in(sb)\n\
+         d : p[2]\n\
+         out(output text(size(d)) + \":\" + text(d[0]) + text(d[2]))\n\
+         close(sa)\nclose(sb)"
+    );
+    assert_eq!(out(&src), "3:13");
+}
+
+#[test]
+fn udp_malformed_output_errors() {
+    let a = next_port();
+    let src = format!(
+        "sa : open([\"network\" \"udp\" \"127.0.0.1\" {a} \"text\"])\nout(sa [\"127.0.0.1\" \"badport\" \"x\"])"
+    );
+    assert!(err(&src).contains("port"));
+}

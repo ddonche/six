@@ -3,6 +3,19 @@
 Every fix or feature bumps the version — including REPL changes. `six --version`,
 the REPL banner, and `six --help` all report it.
 
+## v0.1.7
+- Host I/O network domain (Addendum B): persistent TCP and UDP via open/in/out/close.
+  - TCP connection ["network" "tcp" addr port repr]: byte-stream in/out (text or
+    binary, fixed at open); .. at EOF; text buffers split UTF-8 across reads.
+  - TCP listener ["network" "tcp" "listener" addr port repr]: open(listener)
+    accepts the next connection (inherits representation); closing the listener
+    does not close accepted connections.
+  - UDP ["network" "udp" addr port repr]: in returns [source_addr source_port
+    data] (one datagram); out sends [dest_addr dest_port data]; no truncation.
+  - Network descriptors are not direct in/out targets — they must be opened.
+  - No connect/listen/accept/send/receive primitives; addresses are Text, ports
+    integer Numbers. Sockets close on drop (close / interpreter shutdown).
+
 ## v0.1.6
 - Host I/O file domain (Addendum A). Direct, one-shot in/out (no open/close):
   - ["file" path "text"] / ["file" path "binary"] read and write complete
