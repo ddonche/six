@@ -677,6 +677,9 @@ pub const BUILTINS: &[&str] = &[
     // not capabilities — the shared callable machinery is an implementation
     // detail of the language model).
     "number", "text",
+    // Host observations. The rest of the host surface (open/in/out/close and the
+    // runtime channels input/output/error) lands in later phases.
+    "entropy", "time",
 ];
 
 /// The value of the `["key" value]` pair at `idx` in a store/Group (clone of

@@ -26,6 +26,17 @@ pub fn dispatch(interp: &mut Interpreter, name: &str, args: Vec<Value>, line: us
         "text" => builtin_text(args, line),
         "insert" => builtin_insert(args, line),
         "remove" => builtin_remove(args, line),
+        "entropy" => {
+            arity("entropy", &args, 0, 0, line)?;
+            crate::host::entropy(line)
+        }
+        "time" => {
+            arity("time", &args, 1, 1, line)?;
+            match &args[0] {
+                Value::Text(mode) => crate::host::time(mode, line),
+                other => Err(SixError::at(line, format!("time mode must be text, not a {}", other.type_name()))),
+            }
+        }
         _ => Err(SixError::at(line, format!("unknown builtin '{}'", name))),
     }
 }

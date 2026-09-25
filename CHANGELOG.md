@@ -3,6 +3,18 @@
 Every fix or feature bumps the version — including REPL changes. `six --version`,
 the REPL banner, and `six --help` all report it.
 
+## v0.1.4
+- Host I/O (phase 8 of the host model, landed first because it is independent):
+  add the `entropy()` and `time(mode)` host primitives.
+  - `entropy()` returns a uniform integer in `0 ..= 2^53-1` from a secure OS
+    source (`/dev/urandom` on Unix, `BCryptGenRandom` on Windows); no weak
+    fallback — a runtime error if secure randomness is unavailable.
+  - `time("utc")` / `time("steady")` return integer microseconds; steady is
+    monotonic non-decreasing; an invalid mode is a runtime error.
+  - New `src/host.rs` seeds the host boundary. `print`/`input` are untouched for
+    now; their removal and the `open`/`in`/`out`/`close` primitives land in
+    later phases.
+
 ## v0.1.3
 - REPL: a comment-only or blank line no longer hangs on a continuation prompt;
   it is a complete (empty) entry and evaluates to nothing.

@@ -382,6 +382,56 @@ fn clear_binding_allows_a_fresh_definition() {
     assert!(matches!(interp.run(&six::parse("x").unwrap()).unwrap(), Value::Number(n) if n == 7.0));
 }
 
+// --- host observations: entropy and time -----------------------------------
+
+#[test]
+fn entropy_is_integer_in_range() {
+    for _ in 0..500 {
+        match run("entropy()").unwrap() {
+            Value::Number(n) => {
+                assert!(n.fract() == 0.0, "entropy not integer-valued: {}", n);
+                assert!((0.0..=9_007_199_254_740_991.0).contains(&n), "out of range: {}", n);
+            }
+            other => panic!("entropy should be a number, got {:?}", other),
+        }
+    }
+}
+
+#[test]
+fn entropy_varies() {
+    let first = num("entropy()");
+    let mut differs = false;
+    for _ in 0..30 {
+        if num("entropy()") != first {
+            differs = true;
+            break;
+        }
+    }
+    assert!(differs, "entropy returned a constant value");
+}
+
+#[test]
+fn time_utc_is_integer_microseconds() {
+    let n = num("time(\"utc\")");
+    assert!(n.fract() == 0.0, "utc not integer-valued: {}", n);
+    // Comfortably after 2020-01-01 in microseconds.
+    assert!(n > 1_577_836_800_000_000.0, "utc suspiciously small: {}", n);
+}
+
+#[test]
+fn time_steady_never_decreases_and_is_integer() {
+    let n = num("a : time(\"steady\")\nb : time(\"steady\")\nb - a");
+    assert!(n >= 0.0, "steady time decreased: {}", n);
+    assert!(num("time(\"steady\")").fract() == 0.0, "steady not integer-valued");
+}
+
+#[test]
+fn time_invalid_mode_errors() {
+    assert!(err("time(\"bogus\")").contains("utc"));
+    assert!(err("time(5)").contains("mode"));
+    assert!(err("time()").contains("expects"));
+}
+
 #[test]
 fn clear_all_resets_but_keeps_builtins() {
     use six::Interpreter;
