@@ -1,6 +1,6 @@
 [package]
 name = "six"
-version = "0.1.8"
+version = "0.1.9"
 edition = "2021"
 description = "The Six programming language: a microscopic general-purpose language"
 license = "MIT"

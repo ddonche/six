@@ -3,6 +3,19 @@
 Every fix or feature bumps the version — including REPL changes. `six --version`,
 the REPL banner, and `six --help` all report it.
 
+## v0.1.9
+- Host I/O device domain (Addendum D): the extensible adapter boundary.
+  - in(["device"]) discovers host-exposed devices; with no adapters registered
+    in v1 it always returns [] (discovery establishes no relationship and is
+    in-only — open/out/close on ["device"] are errors).
+  - open(["device" kind identifier? options?]) is the only way to establish a
+    device relationship. v1 registers no concrete adapters, so a well-formed
+    descriptor fails cleanly with "unknown device adapter"; a non-text kind and
+    the bare discovery descriptor are distinct errors.
+  - A ["device" kind ...] descriptor is open-only: direct in/out report that the
+    relationship must be opened first. The dispatch shape is what future
+    adapters plug into — no new Six syntax, primitives, or value types.
+
 ## v0.1.8
 - Host I/O process domain (Addendum C). Current-process state through direct
   descriptors, child processes as persistent runtime-backed Groups:

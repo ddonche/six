@@ -733,9 +733,7 @@ impl Interpreter {
                 Ok(Value::Group(crate::value::new_relationship(Vec::new(), assoc)))
             }
             Some("process") => crate::host::spawn_child(&items, line),
-            Some("device") => {
-                Err(SixError::at(line, "open: the 'device' domain is not implemented yet in this build"))
-            }
+            Some("device") => crate::host::device_open(&items, line),
             _ => Err(SixError::at(line, "open: not a recognized host descriptor")),
         }
     }
@@ -803,7 +801,11 @@ impl Interpreter {
                 }
             }
             Some("device") => {
-                Err(SixError::at(line, "in: the 'device' domain is not implemented yet in this build"))
+                if items.len() == 1 {
+                    crate::host::device_discover()
+                } else {
+                    Err(SixError::at(line, "in: open a device relationship first with open([\"device\" kind ...])"))
+                }
             }
             _ => Err(SixError::at(line, "in: not a host relationship, and not a recognized descriptor")),
         }
@@ -826,7 +828,11 @@ impl Interpreter {
                 }
             }
             Some("device") => {
-                Err(SixError::at(line, "out: the 'device' domain is not implemented yet in this build"))
+                if items.len() == 1 {
+                    Err(SixError::at(line, "out: the device discovery descriptor [\"device\"] is in-only"))
+                } else {
+                    Err(SixError::at(line, "out: open a device relationship first with open([\"device\" kind ...])"))
+                }
             }
             _ => Err(SixError::at(line, "out: not a host relationship, and not a recognized descriptor")),
         }

@@ -604,3 +604,38 @@ fn child_channels_outlive_lifecycle_close() {
                out(output in(o))";
     assert_eq!(out(src), "hi");
 }
+
+// --- device domain (Addendum D) ---------------------------------------------
+//
+// v1 registers no concrete device adapters: discovery is empty and opening any
+// device kind fails cleanly. These tests pin the adapter-boundary contract.
+
+#[test]
+fn device_discovery_is_empty() {
+    // No adapters -> [] (Addendum D.2).
+    assert_eq!(out("d : in([\"device\"])\nout(output text(size(d)))"), "0");
+}
+
+#[test]
+fn device_discovery_is_in_only() {
+    // The discovery descriptor supports in only (D.2 / D.17).
+    assert!(err("open([\"device\"])").contains("in-only"));
+    assert!(err("out([\"device\"] 5)").contains("in-only"));
+    assert!(err("close([\"device\"])").contains("not a host relationship"));
+}
+
+#[test]
+fn device_open_reports_unknown_adapter() {
+    // A well-formed descriptor still fails: no adapters exist in v1 (D.5 / D.16).
+    assert!(err("open([\"device\" \"serial\" \"serial-1\"])").contains("unknown device adapter"));
+    assert!(err("open([\"device\" \"keyboard\" \"keyboard-0\"])").contains("unknown device adapter"));
+    // Kind must be text.
+    assert!(err("open([\"device\" 5])").contains("kind must be text"));
+}
+
+#[test]
+fn device_descriptor_must_be_opened() {
+    // A ["device" kind ...] descriptor is open-only: direct in/out are invalid.
+    assert!(err("in([\"device\" \"serial\" \"serial-1\"])").contains("open a device relationship first"));
+    assert!(err("out([\"device\" \"serial\" \"serial-1\"] 5)").contains("open a device relationship first"));
+}

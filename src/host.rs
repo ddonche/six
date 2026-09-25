@@ -945,6 +945,38 @@ pub fn child_err_read(c: &mut ChildErr, line: usize) -> Result<Value> {
     read_child_stream(&mut c.stream, c.mode, &mut c.buf, line)
 }
 
+// --- device domain (Addendum D) ---------------------------------------------
+//
+// The device domain is an extensible adapter boundary. v1 registers no concrete
+// device adapters, so discovery is always empty and opening any device kind is
+// an "unknown adapter" runtime error. The dispatch shape is what later adapters
+// plug into; nothing here adds Six syntax, primitives, or value types.
+
+/// `in(["device"])` — discover host-exposed devices. With no adapters in v1,
+/// this is always the empty Group.
+pub fn device_discover() -> Result<Value> {
+    Ok(Value::new_group(Vec::new()))
+}
+
+/// `open(["device" kind identifier? options?])` — establish a device
+/// relationship through the named adapter. No adapters exist in v1, so a
+/// well-formed descriptor still fails with "unknown device adapter".
+pub fn device_open(items: &[Value], line: usize) -> Result<Value> {
+    let kind = match items.get(1) {
+        Some(Value::Text(k)) => k.clone(),
+        Some(other) => {
+            return Err(SixError::at(line, format!("device: kind must be text, not a {}", other.type_name())));
+        }
+        None => {
+            return Err(SixError::at(line, "device: the discovery descriptor [\"device\"] cannot be opened; it is in-only"));
+        }
+    };
+    Err(SixError::at(
+        line,
+        format!("device: unknown device adapter \"{}\" (no device adapters are available in this build)", kind),
+    ))
+}
+
 // --- secure OS randomness ---------------------------------------------------
 
 #[cfg(unix)]
