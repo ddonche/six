@@ -3,7 +3,8 @@
 #   Linux/mac:  cat docs/repl_tour.txt | six repl
 #   Windows:    Get-Content docs\repl_tour.txt | six repl
 # Lines marked  # ERR  are DELIBERATE errors — you should see an error for them.
-# (Modules via @ and input() are file/stdin based; see examples/ for those.)
+# (Modules via @ and console input via in(input) are file/stdin based; see
+#  examples/ for those.)
 
 # ---------- numbers ----------
 5
@@ -176,9 +177,9 @@ grade(20)
 grade(7)
 grade(1)
 if any
-    3 > 0 >> print("positive")
-    3 > 10 >> print("huge")
-    else >> print("none")
+    3 > 0 >> out(output "positive\n")
+    3 > 10 >> out(output "huge\n")
+    else >> out(output "none\n")
 .
 msg :
     if

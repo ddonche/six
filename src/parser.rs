@@ -2,7 +2,7 @@
 //!
 //! The canonical Six surface syntax (see `examples/tiny_inventory.six`):
 //!
-//! * **Calls are parenthesised**: `find(items name i)`, `print("")`. Arguments
+//! * **Calls are parenthesised**: `find(items name i)`, `out(output "")`. Arguments
 //!   are separated by whitespace or newlines inside the parentheses; there is no
 //!   bare `f x y` application. A bare name is the function value itself.
 //! * **Declarations start with `:`**: `:name(params)` then a body terminated by

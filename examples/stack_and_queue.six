@@ -1,4 +1,22 @@
 # A Group is all you need for both a stack and a queue (spec §45-46).
+# Six has no `print`; output flows through the runtime output channel.
+:line(s)
+    out(output s)
+    out(output "\n")
+.
+
+# Render a flat Group as "[a b c]" (each element via the text conversion).
+:show(g)
+    line(_bracket(g 0 "["))
+.
+
+:_bracket(g i acc)
+    if
+        i >= size(g) >> acc + "]"
+        i == 0 >> _bracket(g (i + 1) acc + text(g[i]))
+        else >> _bracket(g (i + 1) acc + " " + text(g[i]))
+    .
+.
 
 # Stack: push with insert, pop from the end ($).
 stack : []
@@ -7,8 +25,8 @@ insert(stack 20)
 insert(stack 30)
 value : stack[$]
 remove(stack $)
-print(stack)
-print(value)
+show(stack)
+line(text(value))
 
 # Queue: enqueue with insert, dequeue from the front (0).
 queue : []
@@ -17,5 +35,5 @@ insert(queue "B")
 insert(queue "C")
 first : queue[0]
 remove(queue 0)
-print(queue)
-print(first)
+show(queue)
+line(first)

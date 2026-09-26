@@ -1,12 +1,17 @@
 # Binding, rebinding, and deep copying in Six.
+# Six has no `print`; scalars are written through the output channel.
+:line(s)
+    out(output s)
+    out(output "\n")
+.
 
 # Initial binding.
 count : 1
-print(count)
+line(text(count))
 
 # Rebinding.
 count = count + 1
-print(count)
+line(text(count))
 
 # A nested Group.
 original : [
@@ -23,6 +28,7 @@ copied :: original
 # Change the first value inside the first nested Group through the alias.
 alias[0][0] = 99
 
-print(original)
-print(alias)
-print(copied)
+# original and alias share one Group, so both see 99; copied is untouched.
+line("original[0][0]: " + text(original[0][0]))
+line("alias[0][0]:    " + text(alias[0][0]))
+line("copied[0][0]:   " + text(copied[0][0]))

@@ -1,15 +1,16 @@
 //! The runtime builtins and conversions.
 //!
-//! A name lives here only when Six cannot express it from within itself: I/O
-//! (`print`, `input`), the size of a value (no way to find a Group's end
-//! otherwise), the fundamental Group mutations (`insert`, `remove` — nothing
-//! else grows or shrinks a Group), and keyed existence (`has` — Six has no type
-//! test to skip non-pair members and no way to catch a missing-key read). Plus
-//! the two value conversions (`number`, `text`). Everything derivable from
-//! these — `map`, `filter`, `fold`, `find`, `split`, … — is ordinary Six and
-//! ships outside the core as `.six` modules, never here.
-
-use std::io::{self, Write};
+//! A name lives here only when Six cannot express it from within itself: the
+//! size of a value (no way to find a Group's end otherwise), the fundamental
+//! Group mutations (`insert`, `remove` — nothing else grows or shrinks a
+//! Group), keyed existence (`has` — Six has no type test to skip non-pair
+//! members and no way to catch a missing-key read), and the two value
+//! conversions (`number`, `text`). All I/O is a *host* concern, dispatched
+//! through the relationship primitives (`open`/`in`/`out`/`close`) and the two
+//! pure observations (`entropy`/`time`) — there is no `print` or `input`.
+//! Everything derivable from these — `map`, `filter`, `fold`, `find`, `split`,
+//! … — is ordinary Six and ships outside the core as `.six` modules, never
+//! here.
 
 use crate::error::{Result, SixError};
 use crate::format;
@@ -18,8 +19,6 @@ use crate::value::{GroupRef, Value};
 
 pub fn dispatch(interp: &mut Interpreter, name: &str, args: Vec<Value>, line: usize) -> Result<Value> {
     match name {
-        "print" => builtin_print(interp, args, line),
-        "input" => builtin_input(interp, args, line),
         "size" => builtin_size(args, line),
         "has" => builtin_has(args, line),
         "number" => builtin_number(args, line),
@@ -66,33 +65,6 @@ fn arity(name: &str, args: &[Value], min: usize, max: usize, line: usize) -> Res
         ));
     }
     Ok(())
-}
-
-fn builtin_print(interp: &mut Interpreter, args: Vec<Value>, line: usize) -> Result<Value> {
-    arity("print", &args, 1, 1, line)?;
-    let s = format::display(&args[0]);
-    interp.output(&s);
-    interp.output("\n");
-    Ok(Value::Empty)
-}
-
-fn builtin_input(interp: &mut Interpreter, args: Vec<Value>, line: usize) -> Result<Value> {
-    arity("input", &args, 0, 1, line)?;
-    if let Some(prompt) = args.get(0) {
-        let s = format::display(prompt);
-        interp.output(&s);
-    }
-    let mut buf = String::new();
-    match io::stdin().read_line(&mut buf) {
-        Ok(0) => Ok(Value::Text(String::new())), // EOF
-        Ok(_) => {
-            while buf.ends_with('\n') || buf.ends_with('\r') {
-                buf.pop();
-            }
-            Ok(Value::Text(buf))
-        }
-        Err(e) => Err(SixError::at(line, format!("could not read input: {}", e))),
-    }
 }
 
 fn builtin_size(args: Vec<Value>, line: usize) -> Result<Value> {
@@ -215,7 +187,3 @@ fn as_group<'a>(v: &'a Value, line: usize, op: &str) -> Result<&'a GroupRef> {
         other => Err(SixError::at(line, format!("{} needs a Group, not a {}", op, other.type_name()))),
     }
 }
-
-// Keep the io::Write import used even if print paths change.
-#[allow(dead_code)]
-fn _touch(_w: &dyn Write) {}

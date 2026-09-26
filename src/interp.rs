@@ -689,11 +689,6 @@ impl Interpreter {
 
     // --- builtins & I/O -----------------------------------------------------
 
-    pub fn output(&mut self, s: &str) {
-        let _ = self.out.write_all(s.as_bytes());
-        let _ = self.out.flush();
-    }
-
     fn call_builtin(&mut self, name: &str, args: Vec<Value>, line: usize) -> Result<Value> {
         crate::builtins::dispatch(self, name, args, line)
     }
@@ -977,24 +972,25 @@ impl Flow {
 
 // --- free helpers -----------------------------------------------------------
 
-/// The names the runtime provides directly.
+/// The names the runtime provides directly — the frozen Six surface: six core
+/// builtins and six host builtins, nothing else.
 ///
 /// The doctrine: a *builtin* provides a capability Six cannot create for itself
-/// (I/O, the size of a value, the fundamental Group mutations, keyed
-/// existence). A *conversion* moves between Six's value categories. Everything
-/// derivable from those — `map`, `filter`, `fold`, `find`, `split`, … — is
-/// ordinary Six, written by the programmer, never primitive.
+/// — the size of a value, the fundamental Group mutations, keyed existence, and
+/// the two value conversions. The *host* builtins are Six's entire window to the
+/// outside world: the four relationship primitives plus two pure observations.
+/// Everything derivable from these — `map`, `filter`, `fold`, `find`, `split`,
+/// and every I/O convenience — is ordinary Six, written by the programmer and
+/// shipped outside the core as `.six` modules, never primitive. There is no
+/// `print` or `input`: program I/O flows through the runtime channels
+/// `out(output …)` / `in(input)`.
 pub const BUILTINS: &[&str] = &[
-    // The six capability builtins.
-    "print", "input", "size", "insert", "remove", "has",
-    // Conversions between value categories (associated with the value types,
-    // not capabilities — the shared callable machinery is an implementation
-    // detail of the language model).
-    "number", "text",
-    // Host observations.
-    "entropy", "time",
-    // Host relationship & information-flow primitives.
-    "open", "in", "out", "close",
+    // The six core builtins: sizing, the fundamental Group mutations, keyed
+    // existence, and the two value conversions.
+    "size", "insert", "remove", "has", "number", "text",
+    // The six host builtins: the four relationship & information-flow
+    // primitives, plus two pure observations.
+    "open", "in", "out", "close", "entropy", "time",
 ];
 
 /// The value of the `["key" value]` pair at `idx` in a store/Group (clone of

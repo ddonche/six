@@ -2,6 +2,12 @@
 #
 # `split` is not a builtin — it is ordinary Six. Here is a compact split on a
 # single-character separator, written with the same tools any program has.
+# Six has no `print`; output flows through the runtime output channel.
+:line(s)
+    out(output s)
+    out(output "\n")
+.
+
 :split(str sep)
     _split(str sep [] "" 0)
 .
@@ -39,4 +45,15 @@
     count(words [] 0)
 .
 
-print(frequencies("the cat sat on the mat the cat ran"))
+# The result is a Group of ["word" count] pairs; print one per line.
+:report(pairs i)
+    if
+        i >= size(pairs) >> ..
+        else >>
+            pair : pairs[i]
+            line(pair[0] + ": " + text(pair[1]))
+            report(pairs (i + 1))
+    .
+.
+
+report(frequencies("the cat sat on the mat the cat ran") 0)

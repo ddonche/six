@@ -1,8 +1,9 @@
-//! How Six renders values as text — for `print`, `text`, and error messages.
+//! How Six renders values as text — for the `text` conversion and error
+//! messages.
 //!
-//! `display` is the top-level rendering used by `print` (text appears raw);
-//! `repr` is used for values nested inside a Group (text appears quoted) so the
-//! structure stays legible.
+//! `display` is the top-level rendering (text appears raw); `repr` is used for
+//! values nested inside a Group (text appears quoted) so the structure stays
+//! legible.
 
 use crate::value::Value;
 

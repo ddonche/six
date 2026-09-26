@@ -1,0 +1,77 @@
+# io.six — a reference Six library module for line-oriented console I/O.
+#
+# Six ships NO standard library and has no `print` or `input`. All I/O is a
+# host concern, reached through the runtime channels: `out(output text)` writes,
+# `in(input)` reads a chunk of text (`..` at end of input). This module is
+# ordinary userland Six that packages the common conveniences on top of those
+# primitives — nothing here is part of the language.
+#
+# `in(input)` yields whatever chunk of text is available, which may hold several
+# lines or a partial line. A line-oriented reader therefore keeps the unread
+# tail in a one-cell Group and refills it only when it runs dry.
+#
+# Use it by placing a copy beside your program and importing it:
+#   @io
+#   io["line"]("hello")
+#   name : io["ask"]("Your name: ")
+
+# The unread tail of the input stream.
+buffer : [""]
+
+# Write text with no trailing newline.
+:say(s)
+    out(output s)
+.
+
+# Write text followed by a newline (the everyday "print a line").
+:line(s)
+    out(output s)
+    out(output "\n")
+.
+
+# Write a prompt, then read and return the next line of input (without its
+# trailing newline). Returns any final unterminated text at end of input, or ""
+# once the stream is fully consumed.
+:ask(prompt)
+    out(output prompt)
+    _next-line()
+.
+
+# Read the next line, refilling `buffer` from the input channel as needed.
+:_next-line()
+    at : _find-newline(buffer[0] 0)
+    if
+        at >= 0 >>
+            result : _slice(buffer[0] 0 at "")
+            buffer[0] = _slice(buffer[0] (at + 1) size(buffer[0]) "")
+            result
+        else >>
+            chunk : in(input)
+            if
+                chunk == .. >>
+                    rest : buffer[0]
+                    buffer[0] = ""
+                    rest
+                else >>
+                    buffer[0] = buffer[0] + chunk
+                    _next-line()
+            .
+    .
+.
+
+# Index of the first newline in `s` at or after `i`, or -1 if there is none.
+:_find-newline(s i)
+    if
+        i >= size(s) >> -1
+        s[i] == "\n" >> i
+        else >> _find-newline(s (i + 1))
+    .
+.
+
+# The characters of `s` in the half-open range [start, end).
+:_slice(s i end acc)
+    if
+        i >= end >> acc
+        else >> _slice(s (i + 1) end acc + s[i])
+    .
+.

@@ -189,7 +189,8 @@ fn print_help() {
     println!("Examples:");
     println!("  2 + 3 * 4");
     println!("  x : [1 2 3]");
-    println!("  print(x[$])");
+    println!("  x[$]");
+    println!("  out(output \"hi\\n\")");
     println!("  :square(n)");
     println!("      n * n");
     println!("  .");

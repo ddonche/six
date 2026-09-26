@@ -1,12 +1,18 @@
 # Repetition comes from recursion, not loops (spec §25).
+# Six has no `print`; a line is written through the output channel.
+:line(s)
+    out(output s)
+    out(output "\n")
+.
+
 :countdown(n)
     if
         n <= 0 >> ..
         else >>
-            print(n)
+            line(text(n))
             countdown(n - 1)
     .
 .
 
 countdown(5)
-print("liftoff")
+line("liftoff")

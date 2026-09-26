@@ -1,13 +1,22 @@
 //! Integration tests exercising Six's semantics against the canonical syntax
 //! (see `examples/tiny_inventory.six`).
 //!
-//! Each test runs a Six program and checks its printed output or the value of
-//! its final statement, covering the whole pipeline (lexer → parser →
-//! interpreter).
+//! Each test runs a Six program and checks the value of its final statement
+//! (`shown`), or the text it emits through the runtime output channel
+//! (`printed`), covering the whole pipeline (lexer → parser → interpreter).
+//! Six has no `print`: a program observes a value by leaving it as the final
+//! statement, or by writing it with `out(output …)`.
 
 use six::{run, run_capture, Value};
 
-fn out(src: &str) -> String {
+/// The rendered value of the program's final statement — the ordinary way to
+/// observe a result now that `print` is gone.
+fn shown(src: &str) -> String {
+    six::format::display(&run(src).expect("program should run"))
+}
+
+/// Everything the program emitted through the runtime output channel.
+fn printed(src: &str) -> String {
     run_capture(src).expect("program should run").1
 }
 
@@ -42,7 +51,7 @@ fn malformed_thousands_separator_errors() {
 
 #[test]
 fn new_binding_then_rebind() {
-    assert_eq!(out("x : 5\nx = 7\nprint(x)"), "7\n");
+    assert_eq!(shown("x : 5\nx = 7\nx"), "7");
 }
 
 #[test]
@@ -57,7 +66,7 @@ fn rebinding_undefined_errors() {
 
 #[test]
 fn reading_nonexistent_name_errors() {
-    assert!(err("print(y)").contains("undefined name 'y'"));
+    assert!(err("y").contains("undefined name 'y'"));
 }
 
 #[test]
@@ -70,15 +79,15 @@ fn immutable_uppercase_names() {
 
 #[test]
 fn empty_value_exists() {
-    assert_eq!(out("x : ..\nprint(x)"), "nil\n");
-    assert_eq!(out("x : nil\nprint(x)"), "nil\n");
+    assert_eq!(shown("x : ..\nx"), "nil");
+    assert_eq!(shown("x : nil\nx"), "nil");
 }
 
 #[test]
 fn typed_empty_forms() {
     assert_eq!(num("size(number ..)"), 0.0);
     assert_eq!(num("size(text ..)"), 0.0);
-    assert_eq!(out("x : number ..\nprint(x == ..)"), "true\n");
+    assert_eq!(shown("x : number ..\nx == .."), "true");
 }
 
 #[test]
@@ -92,93 +101,95 @@ fn size_of_empties_is_zero() {
 
 #[test]
 fn text_is_positionally_indexable() {
-    assert_eq!(out("name : \"Dan\"\nprint(name[0])"), "D\n");
-    assert_eq!(out("name : \"Dan\"\nprint(name[$])"), "n\n");
+    assert_eq!(shown("name : \"Dan\"\nname[0]"), "D");
+    assert_eq!(shown("name : \"Dan\"\nname[$]"), "n");
 }
 
 #[test]
 fn text_keyed_lookup_errors() {
-    assert!(err("name : \"Dan\"\nprint(name[\"first\"])").contains("keyed lookup"));
+    assert!(err("name : \"Dan\"\nname[\"first\"]").contains("keyed lookup"));
 }
 
 #[test]
 fn text_position_assignment() {
-    assert_eq!(out("s : \"cat\"\ns[0] = \"b\"\nprint(s)"), "bat\n");
+    assert_eq!(shown("s : \"cat\"\ns[0] = \"b\"\ns"), "bat");
 }
 
 #[test]
 fn concatenation_requires_matching_types() {
-    assert_eq!(out("print(\"Hello, \" + \"Dan\")"), "Hello, Dan\n");
-    assert!(err("print(\"Age: \" + 46)").contains("mix text"));
-    assert_eq!(out("print(\"Age: \" + text(46))"), "Age: 46\n");
+    assert_eq!(shown("\"Hello, \" + \"Dan\""), "Hello, Dan");
+    assert!(err("\"Age: \" + 46").contains("mix text"));
+    assert_eq!(shown("\"Age: \" + text(46)"), "Age: 46");
 }
 
 // --- reference vs value semantics -------------------------------------------
 
 #[test]
 fn groups_are_reference_semantic() {
-    assert_eq!(out("a : [1 2 3]\nb : a\ninsert(b 4)\nprint(a)"), "[1 2 3 4]\n");
+    assert_eq!(shown("a : [1 2 3]\nb : a\ninsert(b 4)\na"), "[1 2 3 4]");
 }
 
 #[test]
 fn deep_copy_is_independent() {
-    assert_eq!(out("a : [1 2 3]\nb :: a\ninsert(b 4)\nprint(a)\nprint(b)"), "[1 2 3]\n[1 2 3 4]\n");
+    let prefix = "a : [1 2 3]\nb :: a\ninsert(b 4)\n";
+    assert_eq!(shown(&format!("{prefix}a")), "[1 2 3]");
+    assert_eq!(shown(&format!("{prefix}b")), "[1 2 3 4]");
 }
 
 #[test]
 fn simple_values_are_value_semantic() {
-    let src = ":bump(n)\n    n = n + 1\n    n\n.\nx : 5\nprint(bump(x))\nprint(x)";
-    assert_eq!(out(src), "6\n5\n");
+    let prefix = ":bump(n)\n    n = n + 1\n    n\n.\nx : 5\n";
+    assert_eq!(shown(&format!("{prefix}bump(x)")), "6");
+    assert_eq!(shown(&format!("{prefix}x")), "5");
 }
 
 // --- groups & indexing ------------------------------------------------------
 
 #[test]
 fn positional_index_out_of_range_errors() {
-    assert!(err("g : [1 2 3]\nprint(g[5])").contains("out of range"));
+    assert!(err("g : [1 2 3]\ng[5]").contains("out of range"));
 }
 
 #[test]
 fn final_position_on_empty_errors() {
-    assert!(err("print([][$])").contains("final position"));
+    assert!(err("[][$]").contains("final position"));
 }
 
 #[test]
 fn negative_index_errors() {
-    assert!(err("g : [1 2 3]\nprint(g[0 - 1])").contains("negative"));
+    assert!(err("g : [1 2 3]\ng[0 - 1]").contains("negative"));
 }
 
 // --- keyed groups -----------------------------------------------------------
 
 #[test]
 fn keyed_lookup_and_first_match_wins() {
-    assert_eq!(out("p : [[\"k\" 1] [\"k\" 2]]\nprint(p[\"k\"])"), "1\n");
+    assert_eq!(shown("p : [[\"k\" 1] [\"k\" 2]]\np[\"k\"]"), "1");
 }
 
 #[test]
 fn missing_keyed_read_errors_but_write_creates() {
-    assert!(err("p : [[\"a\" 1]]\nprint(p[\"b\"])").contains("no key"));
-    assert_eq!(out("p : [[\"a\" 1]]\np[\"b\"] = 2\nprint(p[\"b\"])"), "2\n");
+    assert!(err("p : [[\"a\" 1]]\np[\"b\"]").contains("no key"));
+    assert_eq!(shown("p : [[\"a\" 1]]\np[\"b\"] = 2\np[\"b\"]"), "2");
 }
 
 #[test]
 fn has_distinguishes_existence_from_emptiness() {
-    let src = "p : [[\"mid\" (text ..)]]\nprint(has(p \"mid\"))\nprint(has(p \"nope\"))";
-    assert_eq!(out(src), "true\nfalse\n");
+    let prefix = "p : [[\"mid\" (text ..)]]\n";
+    assert_eq!(shown(&format!("{prefix}has(p \"mid\")")), "true");
+    assert_eq!(shown(&format!("{prefix}has(p \"nope\")")), "false");
 }
 
 #[test]
 fn nested_keyed_assignment_by_reference() {
-    let src = "g : [[[\"qty\" 1]]]\ng[0][\"qty\"] = 5\nprint(g[0][\"qty\"])";
-    assert_eq!(out(src), "5\n");
+    assert_eq!(shown("g : [[[\"qty\" 1]]]\ng[0][\"qty\"] = 5\ng[0][\"qty\"]"), "5");
 }
 
 // --- open / splat -----------------------------------------------------------
 
 #[test]
 fn splat_opens_a_group_into_arguments() {
-    let src = ":add3(a b c)\n    a + b + c\n.\nnums : [1 2 3]\nprint(add3(<nums>))";
-    assert_eq!(out(src), "6\n");
+    assert_eq!(shown(":add3(a b c)\n    a + b + c\n.\nnums : [1 2 3]\nadd3(<nums>)"), "6");
 }
 
 // --- operations -------------------------------------------------------------
@@ -192,20 +203,20 @@ fn arithmetic_and_precedence() {
 
 #[test]
 fn division_by_zero_errors() {
-    assert!(err("print(1 / 0)").contains("division by zero"));
+    assert!(err("1 / 0").contains("division by zero"));
 }
 
 #[test]
 fn logical_operators_require_booleans() {
-    assert_eq!(out("print(true and false)"), "false\n");
-    assert_eq!(out("print(true or false)"), "true\n");
-    assert_eq!(out("print(not true)"), "false\n");
-    assert!(err("print(5 and true)").contains("boolean"));
+    assert_eq!(shown("true and false"), "false");
+    assert_eq!(shown("true or false"), "true");
+    assert_eq!(shown("not true"), "false");
+    assert!(err("5 and true").contains("boolean"));
 }
 
 #[test]
 fn no_truthiness_in_conditions() {
-    assert!(err("if\n    5 >> print(\"x\")\n.").contains("truthiness"));
+    assert!(err("if\n    5 >> out(output \"x\")\n.").contains("truthiness"));
 }
 
 // --- postfix numeric operators ----------------------------------------------
@@ -227,94 +238,96 @@ fn postfix_square_sqrt_power() {
 
 #[test]
 fn increment_and_decrement() {
-    assert_eq!(out("x : 5\nx++\nx++\nprint(x)"), "7\n");
-    assert_eq!(out("x : 5\nx--\nprint(x)"), "4\n");
-    let src = "g : [[[\"qty\" 1]]]\ng[0][\"qty\"]++\nprint(g[0][\"qty\"])";
-    assert_eq!(out(src), "2\n");
+    assert_eq!(shown("x : 5\nx++\nx++\nx"), "7");
+    assert_eq!(shown("x : 5\nx--\nx"), "4");
+    assert_eq!(shown("g : [[[\"qty\" 1]]]\ng[0][\"qty\"]++\ng[0][\"qty\"]"), "2");
 }
 
 // --- functions & flow -------------------------------------------------------
 
 #[test]
 fn functions_and_first_class_values() {
-    let src = ":square(x)\n    x * x\n.\n:apply(f n)\n    f(n)\n.\nprint(apply(square 6))";
-    assert_eq!(out(src), "36\n");
+    assert_eq!(shown(":square(x)\n    x * x\n.\n:apply(f n)\n    f(n)\n.\napply(square 6)"), "36");
 }
 
 #[test]
 fn closures_capture_environment() {
     // `at-most` returns a predicate closing over `limit` (tiny_inventory §).
-    let src = ":at-most(limit)\n    :matches(x)\n        x <= limit\n    .\n    matches\n.\np : at-most(3)\nprint(p(2))\nprint(p(9))";
-    assert_eq!(out(src), "true\nfalse\n");
+    let prefix = ":at-most(limit)\n    :matches(x)\n        x <= limit\n    .\n    matches\n.\np : at-most(3)\n";
+    assert_eq!(shown(&format!("{prefix}p(2)")), "true");
+    assert_eq!(shown(&format!("{prefix}p(9)")), "false");
 }
 
 #[test]
 fn flow_feeds_first_argument() {
-    let src = ":subtract(x y)\n    x - y\n.\nprint(10 >> subtract(3))";
-    assert_eq!(out(src), "7\n");
+    assert_eq!(shown(":subtract(x y)\n    x - y\n.\n10 >> subtract(3)"), "7");
 }
 
 #[test]
 fn flow_chain_across_lines() {
-    let src = ":double(x)\n    x * 2\n.\n:inc(x)\n    x + 1\n.\nr :\n    10 >>\n    double() >>\n    inc()\nprint(r)";
-    assert_eq!(out(src), "21\n");
+    let src = ":double(x)\n    x * 2\n.\n:inc(x)\n    x + 1\n.\nr :\n    10 >>\n    double() >>\n    inc()\nr";
+    assert_eq!(shown(src), "21");
 }
 
 #[test]
 fn dot_flow_is_call_sugar() {
-    assert_eq!(out("print([1 2 3 4].size)"), "4\n");
+    assert_eq!(shown("[1 2 3 4].size"), "4");
 }
 
 #[test]
 fn bare_function_value_has_no_effect() {
-    assert_eq!(out("print\nprint(\"hi\")"), "hi\n");
+    // A bare builtin name evaluates to the function value and is discarded; the
+    // following statement is what emits.
+    assert_eq!(printed("out\nout(output \"hi\")"), "hi");
 }
 
 // --- conditionals -----------------------------------------------------------
 
 #[test]
 fn if_first_match_wins() {
-    let src = ":d(x)\n    if\n        x > 10 >> \"big\"\n        x > 5 >> \"medium\"\n        else >> \"small\"\n    .\n.\nprint(d(20))\nprint(d(7))\nprint(d(1))";
-    assert_eq!(out(src), "big\nmedium\nsmall\n");
+    let prefix = ":d(x)\n    if\n        x > 10 >> \"big\"\n        x > 5 >> \"medium\"\n        else >> \"small\"\n    .\n.\n";
+    assert_eq!(shown(&format!("{prefix}d(20)")), "big");
+    assert_eq!(shown(&format!("{prefix}d(7)")), "medium");
+    assert_eq!(shown(&format!("{prefix}d(1)")), "small");
 }
 
 #[test]
 fn if_any_runs_every_match() {
-    let src = "if any\n    3 > 0 >> print(\"positive\")\n    3 > 10 >> print(\"huge\")\n    else >> print(\"none\")\n.";
-    assert_eq!(out(src), "positive\n");
+    let src = "if any\n    3 > 0 >> out(output \"positive\")\n    3 > 10 >> out(output \"huge\")\n    else >> out(output \"none\")\n.";
+    assert_eq!(printed(src), "positive");
 }
 
 #[test]
 fn conditional_shorthand_matches_words() {
-    let src = "x : 20\nm :\n    ?\n        x > 10 >> \"big\"\n        ?? >> \"small\"\n    .\nprint(m)";
-    assert_eq!(out(src), "big\n");
+    let src = "x : 20\nm :\n    ?\n        x > 10 >> \"big\"\n        ?? >> \"small\"\n    .\nm";
+    assert_eq!(shown(src), "big");
 }
 
 #[test]
 fn conditional_as_value() {
-    let src = "guess : 3\nanswer : 5\nm :\n    if\n        guess < answer >> \"Too low.\"\n        else >> \"Too high.\"\n    .\nprint(m)";
-    assert_eq!(out(src), "Too low.\n");
+    let src = "guess : 3\nanswer : 5\nm :\n    if\n        guess < answer >> \"Too low.\"\n        else >> \"Too high.\"\n    .\nm";
+    assert_eq!(shown(src), "Too low.");
 }
 
 // --- recursion & TCO --------------------------------------------------------
 
 #[test]
 fn tail_recursion_is_bounded_stack() {
-    let src = ":sum(n acc)\n    if\n        n == 0 >> acc\n        else >> sum((n - 1) (acc + n))\n    .\n.\nprint(sum(1000000 0))";
-    assert_eq!(out(src), "500000500000\n");
+    let src = ":sum(n acc)\n    if\n        n == 0 >> acc\n        else >> sum((n - 1) (acc + n))\n    .\n.\nsum(1000000 0)";
+    assert_eq!(shown(src), "500000500000");
 }
 
 // --- comments ---------------------------------------------------------------
 
 #[test]
 fn block_and_line_comments() {
-    let src = "## this is\na block comment ##\nx : 5 # trailing line comment\nprint(x)";
-    assert_eq!(out(src), "5\n");
+    let src = "## this is\na block comment ##\nx : 5 # trailing line comment\nx";
+    assert_eq!(shown(src), "5");
 }
 
 #[test]
 fn unterminated_block_comment_errors() {
-    assert!(err("## never closed\nprint(1)").contains("unterminated block comment"));
+    assert!(err("## never closed\n1").contains("unterminated block comment"));
 }
 
 // --- a program that builds a keyed structure --------------------------------
@@ -354,15 +367,15 @@ fn word_frequency_counter() {
         "    words : split(source \" \")\n",
         "    count(words [] 0)\n",
         ".\n",
-        "print(frequencies(\"a b a c b a\"))\n",
+        "frequencies(\"a b a c b a\")\n",
     );
-    assert_eq!(out(src), "[[\"a\" 3] [\"b\" 2] [\"c\" 1]]\n");
+    assert_eq!(shown(src), "[[\"a\" 3] [\"b\" 2] [\"c\" 1]]");
 }
 
 #[test]
 fn split_is_userland_not_a_builtin() {
     // There is no `split` in the runtime; calling it undefined is an error.
-    assert!(err("print(split(\"a b\" \" \"))").contains("undefined name 'split'"));
+    assert!(err("split(\"a b\" \" \")").contains("undefined name 'split'"));
 }
 
 // --- REPL clear support (an interpreter capability, not language syntax) -----
@@ -441,5 +454,5 @@ fn clear_all_resets_but_keeps_builtins() {
     // User bindings are gone...
     assert!(interp.run(&six::parse("y").unwrap()).is_err());
     // ...but builtins remain and the names are free to define again.
-    interp.run(&six::parse(":sq(n)\n    n + n\n.\nprint(sq(4))").unwrap()).unwrap();
+    interp.run(&six::parse(":sq(n)\n    n + n\n.\nout(output text(sq(4)))").unwrap()).unwrap();
 }

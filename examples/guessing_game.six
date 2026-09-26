@@ -1,6 +1,57 @@
 # Guessing game (spec §44) in canonical Six syntax.
-:ask(answer attempts)
-    guess : number(input("Guess a number from 1 to 100: "))
+# Six has no `print` or `input`: I/O flows through the runtime channels
+# `out(output …)` and `in(input)`. `line` and `ask` are ordinary userland
+# helpers over those primitives (the same ones reference/io.six provides).
+input_buffer : [""]
+
+:line(s)
+    out(output s)
+    out(output "\n")
+.
+
+:ask(prompt)
+    out(output prompt)
+    _next-line()
+.
+
+:_next-line()
+    at : _find-newline(input_buffer[0] 0)
+    if
+        at >= 0 >>
+            result : _slice(input_buffer[0] 0 at "")
+            input_buffer[0] = _slice(input_buffer[0] (at + 1) size(input_buffer[0]) "")
+            result
+        else >>
+            chunk : in(input)
+            if
+                chunk == .. >>
+                    rest : input_buffer[0]
+                    input_buffer[0] = ""
+                    rest
+                else >>
+                    input_buffer[0] = input_buffer[0] + chunk
+                    _next-line()
+            .
+    .
+.
+
+:_find-newline(s i)
+    if
+        i >= size(s) >> -1
+        s[i] == "\n" >> i
+        else >> _find-newline(s (i + 1))
+    .
+.
+
+:_slice(s i end acc)
+    if
+        i >= end >> acc
+        else >> _slice(s (i + 1) end acc + s[i])
+    .
+.
+
+:play(answer attempts)
+    guess : number(ask("Guess a number from 1 to 100: "))
     check(answer attempts guess)
 .
 
@@ -9,8 +60,8 @@
 
     if
         guess == answer >>
-            print("Correct!")
-            print("Attempts: " + text(attempts))
+            line("Correct!")
+            line("Attempts: " + text(attempts))
 
         else >>
             message :
@@ -19,9 +70,9 @@
                     else >> "Too high."
                 .
 
-            print(message)
-            ask(answer attempts)
+            line(message)
+            play(answer attempts)
     .
 .
 
-ask(42 0)
+play(42 0)

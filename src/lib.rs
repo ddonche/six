@@ -2,9 +2,12 @@
 //!
 //! This crate is the reference implementation of Six v0.1: lexer, parser, and
 //! a tree-walking interpreter with guaranteed tail-call optimisation. Six ships
-//! no standard library — the core is only the language, six builtins, and two
-//! conversions; libraries live outside Six as ordinary `.six` modules used via
-//! `@`. See `docs/six_spec.txt` for the authoritative language specification.
+//! no standard library — the core is only the language, six core builtins
+//! (`size insert remove has number text`) and six host builtins
+//! (`open in out close entropy time`); there is no `print` or `input`. All I/O
+//! flows through the host boundary, and libraries live outside Six as ordinary
+//! `.six` modules used via `@`. See `docs/six_spec.txt` for the authoritative
+//! language specification.
 
 pub mod ast;
 pub mod builtins;

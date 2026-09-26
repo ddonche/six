@@ -45,13 +45,18 @@ impl Drop for Sandbox {
 
 const HERO: &str = "name : \"Conan\"\nhealth : 100\n\n:damage(amount)\n    health = health - amount\n.\n";
 
+/// A userland line printer, prepended to entry programs so the tests can
+/// observe scalar values now that `print` is gone. `text` renders the scalar;
+/// the newline separates successive observations, matching the old `print`.
+const SAY: &str = ":say(v)\n    out(output text(v))\n    out(output \"\\n\")\n.\n";
+
 #[test]
 fn basic_import_and_live_binding() {
     let s = Sandbox::new();
     s.write("hero.six", HERO);
     s.write(
         "main.six",
-        "@hero\nprint(hero[\"name\"])\nprint(hero[\"health\"])\nhero[\"damage\"](20)\nprint(hero[\"health\"])",
+        &format!("{SAY}@hero\nsay(hero[\"name\"])\nsay(hero[\"health\"])\nhero[\"damage\"](20)\nsay(hero[\"health\"])"),
     );
     assert_eq!(s.run("main.six"), "Conan\n100\n80\n");
 }
@@ -62,7 +67,7 @@ fn external_rebinding() {
     s.write("hero.six", HERO);
     s.write(
         "main.six",
-        "@hero\nhero[\"health\"] = 50\nhero[\"damage\"](10)\nprint(hero[\"health\"])",
+        &format!("{SAY}@hero\nhero[\"health\"] = 50\nhero[\"damage\"](10)\nsay(hero[\"health\"])"),
     );
     assert_eq!(s.run("main.six"), "40\n");
 }
@@ -73,7 +78,7 @@ fn function_retrieval_shares_environment() {
     s.write("hero.six", HERO);
     s.write(
         "main.six",
-        "@hero\ndamage : hero[\"damage\"]\ndamage(20)\ndamage(20)\nprint(hero[\"health\"])",
+        &format!("{SAY}@hero\ndamage : hero[\"damage\"]\ndamage(20)\ndamage(20)\nsay(hero[\"health\"])"),
     );
     // The locally-bound function operates on the same hero.six environment.
     assert_eq!(s.run("main.six"), "60\n");
@@ -86,7 +91,7 @@ fn collision_isolation() {
     s.write("enemy.six", "name : \"Goblin\"\nhealth : 30\n\n:damage(amount)\n    health = health - amount\n.\n");
     s.write(
         "main.six",
-        "@hero\n@enemy\nhero[\"damage\"](10)\nenemy[\"damage\"](20)\nprint(hero[\"health\"])\nprint(enemy[\"health\"])",
+        &format!("{SAY}@hero\n@enemy\nhero[\"damage\"](10)\nenemy[\"damage\"](20)\nsay(hero[\"health\"])\nsay(enemy[\"health\"])"),
     );
     assert_eq!(s.run("main.six"), "90\n10\n");
 }
@@ -99,7 +104,7 @@ fn nested_dependencies_load_transitively() {
     s.write("hero.six", "@inventory\ntitle : \"Hero\"\n");
     s.write(
         "game.six",
-        "@hero\nprint(hero[\"title\"])\nprint(hero[\"inventory\"][\"describe\"]())\nprint(hero[\"inventory\"][\"item\"][\"power\"]())",
+        &format!("{SAY}@hero\nsay(hero[\"title\"])\nsay(hero[\"inventory\"][\"describe\"]())\nsay(hero[\"inventory\"][\"item\"][\"power\"]())"),
     );
     assert_eq!(s.run("game.six"), "Hero\nsword\n10\n");
 }
@@ -112,7 +117,7 @@ fn shared_module_identity() {
     s.write("b.six", "@counter\n:current()\n    counter[\"value\"]\n.\n");
     s.write(
         "main.six",
-        "@a\n@b\n@counter\na[\"tick\"]()\ncounter[\"bump\"]()\nprint(b[\"current\"]())\nprint(a[\"counter\"] == counter)",
+        &format!("{SAY}@a\n@b\n@counter\na[\"tick\"]()\ncounter[\"bump\"]()\nsay(b[\"current\"]())\nsay(a[\"counter\"] == counter)"),
     );
     // a, b and the top level share one counter: two bumps => 2, same instance.
     assert_eq!(s.run("main.six"), "2\ntrue\n");
@@ -124,7 +129,7 @@ fn module_size_and_has() {
     s.write("hero.six", HERO);
     s.write(
         "main.six",
-        "@hero\nprint(size(hero))\nprint(has(hero \"health\"))\nprint(has(hero \"mana\"))",
+        &format!("{SAY}@hero\nsay(size(hero))\nsay(has(hero \"health\"))\nsay(has(hero \"mana\"))"),
     );
     // hero.six has three top-level bindings: name, health, damage.
     assert_eq!(s.run("main.six"), "3\ntrue\nfalse\n");
@@ -133,7 +138,7 @@ fn module_size_and_has() {
 #[test]
 fn missing_module_errors() {
     let s = Sandbox::new();
-    s.write("main.six", "@ghost\nprint(1)");
+    s.write("main.six", "@ghost\n1");
     let err = run_file_capture(&s.dir.join("main.six")).unwrap_err();
     assert!(err.message.contains("cannot import 'ghost'"), "got: {}", err.message);
 }
@@ -151,7 +156,7 @@ fn module_is_an_ordinary_group_positional_indexing() {
     s.write("m.six", "name : \"Conan\"\nhealth : 100\n");
     s.write(
         "main.six",
-        "@m\nfirst : m[0]\nprint(first[0])\nprint(first[1])\nprint(size(m[$]))",
+        &format!("{SAY}@m\nfirst : m[0]\nsay(first[0])\nsay(first[1])\nsay(size(m[$]))"),
     );
     assert_eq!(s.run("main.six"), "name\nConan\n2\n");
 }
@@ -163,7 +168,7 @@ fn module_opens_with_splat() {
     s.write("m.six", "a : 1\nb : 2\n");
     s.write(
         "main.six",
-        ":pair-key(p q)\n    p[0] + \" and \" + q[0]\n.\n@m\nprint(pair-key(<m>))",
+        &format!("{SAY}:pair-key(p q)\n    p[0] + \" and \" + q[0]\n.\n@m\nsay(pair-key(<m>))"),
     );
     assert_eq!(s.run("main.six"), "a and b\n");
 }
@@ -175,15 +180,18 @@ fn module_supports_insert_remove_size_has() {
     s.write("m.six", "health : 100\n");
     s.write(
         "main.six",
-        concat!(
-            "@m\n",
-            "print(size(m))\n",
-            "print(has(m \"health\"))\n",
-            "insert(m [\"mana\" 50])\n",   // append a new pair like any Group
-            "print(size(m))\n",
-            "print(m[\"mana\"])\n",
-            "remove(m 0)\n",               // drop the first pair positionally
-            "print(has(m \"health\"))\n",
+        &format!(
+            "{SAY}{}",
+            concat!(
+                "@m\n",
+                "say(size(m))\n",
+                "say(has(m \"health\"))\n",
+                "insert(m [\"mana\" 50])\n",   // append a new pair like any Group
+                "say(size(m))\n",
+                "say(m[\"mana\"])\n",
+                "remove(m 0)\n",               // drop the first pair positionally
+                "say(has(m \"health\"))\n",
+            )
         ),
     );
     assert_eq!(s.run("main.six"), "1\ntrue\n2\n50\nfalse\n");
@@ -196,7 +204,7 @@ fn module_deep_copy_is_ordinary() {
     s.write("m.six", "health : 100\n");
     s.write(
         "main.six",
-        "@m\nsnapshot :: m\nm[\"health\"] = 5\nprint(snapshot[\"health\"])\nprint(m[\"health\"])",
+        &format!("{SAY}@m\nsnapshot :: m\nm[\"health\"] = 5\nsay(snapshot[\"health\"])\nsay(m[\"health\"])"),
     );
     assert_eq!(s.run("main.six"), "100\n5\n");
 }
@@ -208,7 +216,7 @@ fn module_equality_is_reference_identity() {
     s.write("m.six", "x : 1\n");
     s.write(
         "main.six",
-        "@m\nalias : m\ncopy :: m\nprint(alias == m)\nprint(copy == m)",
+        &format!("{SAY}@m\nalias : m\ncopy :: m\nsay(alias == m)\nsay(copy == m)"),
     );
     assert_eq!(s.run("main.six"), "true\nfalse\n");
 }
@@ -219,7 +227,7 @@ fn external_uppercase_keyed_write_is_legal() {
     // even though the Group is another program's top-level environment.
     let s = Sandbox::new();
     s.write("consts.six", "MAX : 100\n");
-    s.write("main.six", "@consts\nconsts[\"MAX\"] = 5\nprint(consts[\"MAX\"])");
+    s.write("main.six", &format!("{SAY}@consts\nconsts[\"MAX\"] = 5\nsay(consts[\"MAX\"])"));
     assert_eq!(s.run("main.six"), "5\n");
 }
 
@@ -236,5 +244,5 @@ fn internal_uppercase_rebind_is_illegal() {
 #[test]
 fn builtins_are_read_only() {
     // The builtins scope is read-only runtime infrastructure.
-    assert!(six::run("print = 5").unwrap_err().message.contains("builtin"));
+    assert!(six::run("size = 5").unwrap_err().message.contains("builtin"));
 }
