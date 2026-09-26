@@ -3,6 +3,28 @@
 Every fix or feature bumps the version — including REPL changes. `six --version`,
 the REPL banner, and `six --help` all report it.
 
+## v0.1.10
+- Cleanup and migration: the frozen Six surface is now final — six core builtins
+  (size insert remove has number text) and six host builtins (open in out close
+  entropy time). `print` and `input` are removed from the language; all I/O
+  flows through the runtime channels, `out(output …)` and `in(input)`.
+  - builtins.rs/interp.rs: print/input and their dispatch removed; BUILTINS and
+    the module docs describe the 6 + 6 surface. Runtime input is injectable so
+    captured/test interpreters read an empty (EOF) source, never real stdin.
+  - Examples migrated: output-only programs use a local `line` helper; the
+    interactive guessing_game and tiny_inventory use a buffered line reader over
+    in(input). New reference/io.six documents the userland console-I/O pattern.
+  - Tests migrated (integration observes values via a `shown` helper or the
+    captured output channel; modules use a userland `say`); docs/repl_tour.txt
+    and the REPL help no longer mention print/input.
+  - Embedded spec (`six spec`): §37/§38 restated for the 6 + 6 surface, new
+    §38.1 Host I/O documents entropy/time, the four relationship primitives, the
+    runtime channels, and the file/network/process/device domains; illustrative
+    examples use the host-channel forms.
+  - New tests/acceptance.rs: a spec-level pass over the whole frozen surface —
+    the twelve builtins, the absence of print/input, and an end-to-end program
+    for every host capability.
+
 ## v0.1.9
 - Host I/O device domain (Addendum D): the extensible adapter boundary.
   - in(["device"]) discovers host-exposed devices; with no adapters registered
