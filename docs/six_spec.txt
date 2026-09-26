@@ -118,6 +118,20 @@ if already handles multiple branches; there is no elif.
 
 
 
+Calls are parenthesised: f(a b c), with arguments separated by whitespace
+inside the parentheses. Some illustrative snippets later in this document use an
+older space-call notation (f a b c); the canonical surface is the parenthesised
+form shown in examples/tiny_inventory.six.
+
+
+
+There is no print and no input. All I/O — the console, files, networks,
+processes, devices, the clock, and randomness — goes through the six host
+builtins (open, in, out, close, entropy, time). Write a console line with
+out(output "…") and read one chunk with in(input). See section 38.1.
+
+
+
 if any executes every matching branch.
 
 
@@ -457,7 +471,7 @@ size (text ..) # 0
 This distinction is fundamental.
 
 x : ..
-print x
+out(output text(x))
 
 
 is valid.
@@ -466,7 +480,7 @@ x exists. Its value is empty.
 
 But:
 
-print y
+out(output text(y))
 
 
 when y has never been declared is an error.
@@ -1078,15 +1092,15 @@ In a transformation chain, the current flowing value becomes the first argument 
 
 Therefore:
 
-x >> print
+x >> out(output)
 
 means:
 
-print x
+out(output x)
 
 while bare:
 
-print
+out
 
 outside a chain is merely the function value and performs no output.
 
@@ -1106,7 +1120,7 @@ A function may be written compactly:
 A function with no parameters omits the parameter structure:
 
 >> greet >>
-    print "Hello"
+    out(output "Hello")
 .
 
 
@@ -1117,7 +1131,7 @@ A function with no parameters omits the parameter structure:
 Function calls use whitespace.
 
 add 2 3
-print "Hello"
+out(output "Hello")
 size group
 
 
@@ -1125,7 +1139,7 @@ No call punctuation is required.
 
 Parentheses group nested expressions:
 
-print (text (size values))
+out(output (text (size values)))
 
 
 Parentheses are expression grouping, not special function-call syntax.
@@ -1200,7 +1214,7 @@ A function may instead expose part of that Group:
 .
 
 
-Returning a value does not print it.
+Returning a value does not emit it to any output channel.
 
 
 
@@ -1228,13 +1242,13 @@ If the final operation yields empty, the function yields empty.
 Example:
 
 >> announce: [message] >>
-    print message
+    out(output message)
 .
 
 
-announce prints the message.
+announce writes the message to the output channel.
 
-It does not automatically return the printed message.
+It does not automatically return the written message.
 
 
 
@@ -1297,7 +1311,7 @@ Example:
     if
         n <= 0 >> ..
         else >>
-            print n
+            out(output text(n))
             countdown (n - 1)
     .
 .
@@ -1344,10 +1358,10 @@ The first true branch executes.
 Example:
 
 if
-    x > 10 >> print "big"
-    x > 5  >> print "medium"
-    x > 0  >> print "small"
-    else   >> print "nothing"
+    x > 10 >> out(output "big")
+    x > 5  >> out(output "medium")
+    x > 0  >> out(output "small")
+    else   >> out(output "nothing")
 .
 
 
@@ -1364,8 +1378,8 @@ It runs if none of the preceding conditions match.
 Example:
 
 if
-    age >= 18 >> print "adult"
-    else      >> print "minor"
+    age >= 18 >> out(output "adult")
+    else      >> out(output "minor")
 .
 
 
@@ -1380,10 +1394,10 @@ Every true branch executes.
 Example:
 
 if any
-    x > 10  >> print "big"
-    x > 0   >> print "positive"
-    x.even? >> print "even"
-    else    >> print "nothing matched"
+    x > 10  >> out(output "big")
+    x > 0   >> out(output "positive")
+    x.even? >> out(output "even")
+    else    >> out(output "nothing matched")
 .
 
 
@@ -1403,8 +1417,8 @@ The symbolic forms are optional shorthand:
 Example:
 
 ?
-    x > 10 >> print "big"
-    ??     >> print "small"
+    x > 10 >> out(output "big")
+    ??     >> out(output "small")
 .
 
 
@@ -1445,7 +1459,7 @@ message :
         else           >> "Too high."
     .
 
-print message
+out(output message)
 
 
 
@@ -1480,7 +1494,7 @@ Example:
 
 x : 5
 y : 10
-print x
+out(output text(x))
 
 
 An obviously incomplete expression may continue onto the next line:
@@ -1556,41 +1570,29 @@ subtract 10 3
 
 A bare function name is still a function value.
 
-Six does not silently print or perform some other effect merely because an identifier appears.
+Six does not silently perform an effect merely because an identifier appears.
 
 For example:
 
-print
+out
 
 
-is not equivalent to:
+is the output-channel function value; it is not equivalent to:
 
-print value
+out(output value)
 
 
 Effects require actual arguments.
 
 This distinction must remain visible in the grammar and evaluator.
 
+A bare name is a function value; flow supplies the missing argument, so:
 
-
-The current wording is misleading because it was written after we temporarily thought >> print shouldn't work.
-
-It should instead say:
-
-print
-
-is a function value.
-
-But:
-
-value >> print
+value >> out(output)
 
 calls:
 
-print value
-
-No contradiction.
+out(output value)
 
 
 
@@ -1652,11 +1654,11 @@ because dot syntax has a different conceptual job.
 
 37. No Standard Library
 
-Six ships no standard library. The core is only the language, six builtins, and
-two conversions. Everything else — including every "library" operation — lives
-outside Six as ordinary .six modules, imported with @ and totally usable, but
-never part of the language and never auto-loaded. That is the whole reason the
-module capability exists.
+Six ships no standard library. The core is only the language, six core builtins,
+and six host builtins. Everything else — including every "library" operation —
+lives outside Six as ordinary .six modules, imported with @ and totally usable,
+but never part of the language and never auto-loaded. That is the whole reason
+the module capability exists.
 
 The test for what belongs in the core (as a builtin) is a single question:
 
@@ -1701,8 +1703,6 @@ fold
 find
 number
 text
-input
-print
 insert
 remove
 
@@ -1711,21 +1711,26 @@ Their existence does not make them new fundamental language concepts.
 
 Where practical, library operations should themselves be implementable in Six.
 
-The runtime therefore provides exactly two kinds of name:
+The runtime provides exactly twelve names, in two groups of six.
 
-Builtins provide a capability Six cannot create for itself. There are six:
+Core builtins provide a capability Six cannot create for itself — sizing, the
+fundamental Group mutations, keyed existence, and the two value conversions:
 
-print
-input
 size
 insert
 remove
 has
-
-Conversions move a value between Six's fundamental value categories:
-
 number
 text
+
+Host builtins are Six's entire window to the outside world (see section 38.1):
+
+open
+in
+out
+close
+entropy
+time
 
 Everything else — map, filter, fold, find, split — is derivable and belongs in
 Six itself, not in the runtime. It is ordinary Six code (see the reference split
@@ -1733,49 +1738,8 @@ below and reference/text.six) and is never auto-imported: a program that wants
 it writes it, copies a reference implementation, or imports a module. Six ships
 no standard library; every library lives outside the core and is used via @.
 
-Runtime-level operations are appropriate where the language cannot implement them internally, such as:
-
-
-
-
-
-terminal input/output
-
-
-
-operating-system access
-
-
-
-randomness
-
-
-
-low-level storage operations
-
-
-
-external networking
-
-
-
-similar host services
-
-
-
-Minimal contract:
-
-input
-
-reads one line of text.
-
-input "Enter name: "
-
-displays the prompt and then reads one line of text.
-
-The result is text.
-
-
+There is no print and no input. A program writes to the console with
+out(output …) and reads from it with in(input) — see section 38.1.
 
 Reference library operation (NOT a builtin):
 
@@ -1789,6 +1753,61 @@ primitive. A program obtains it by writing it or importing a module:
 
 @text
 parts : text["split"](line " ")
+
+
+
+38.1 Host I/O
+
+Every interaction with the world outside the program — the console, files,
+networks, other processes, devices, the clock, and secure randomness — goes
+through the six host builtins. No host operation adds Six syntax, primitives, or
+value types: descriptors and results are ordinary Groups, Text, and Numbers.
+
+Two are pure observations:
+
+entropy()          one uniformly distributed integer in 0 .. 2^53-1, from a
+                   secure OS source (a runtime error if none is available).
+time("utc")        integer microseconds since the Unix epoch.
+time("steady")     integer microseconds from a monotonic clock (non-decreasing).
+
+Four are the relationship and information-flow primitives:
+
+open(target)       establish a persistent external relationship.
+in(target)         obtain externally sourced information.
+out(target value)  transmit information or intent outward.
+close(target)      end Six's relationship with the target.
+
+A target is an ordinary Group. A bare descriptor Group names a resource; once
+opened, the returned Group carries a hidden runtime association bound to its
+identity (never to its visible contents). Aliasing shares that relationship; ::
+deep-copy produces an ordinary Group with none; == on relationships is identity.
+
+Runtime channels. Three relationships are pre-bound before any user code:
+
+input              in(input) reads the next chunk of console text as Text,
+                   buffering a UTF-8 character split across reads; .. at end of
+                   input. (out/open on input is an error.)
+output             out(output text) writes Text to standard output, adding no
+                   newline. (in/open on output is an error.)
+error              out(error text) writes Text to standard error.
+
+Domains reached through descriptor Groups:
+
+file       ["file" path "text"|"binary"|"directory"|"metadata"] and
+           ["file" source "path"] — direct, one-shot in/out (no open/close);
+           a missing path reads as ..; out .. removes an entry.
+network    ["network" "tcp"|"udp" …] — persistent sockets via open/in/out/close.
+process    ["process" …] — current-process arguments, environment, working
+           directory, and exit; child processes via open, with input/output/
+           error channels, in(child) to await termination, out(child ..) to
+           terminate, and close to release.
+device     ["device"] discovers devices (in only); open(["device" kind …])
+           establishes a device relationship through an adapter.
+
+Representation. file, network, and process relationships are fixed at "text" or
+"binary" when established: text is UTF-8 Six Text, binary is a Group of Numbers
+0..255. In every domain .. marks end-of-input or absence, "" and [] never do,
+out returns .., and a genuine host failure is an ordinary Six runtime error.
 
 
 
@@ -1924,8 +1943,13 @@ local rebinding
 
 44. Example: Guessing Game Structure
 
+Console I/O uses the runtime channels: out(output …) writes, in(input) reads a
+chunk of text. A runnable version in the canonical surface syntax, with a proper
+line reader over in(input), is in examples/guessing_game.six.
+
 >> ask: [answer attempts] >>
-    guess : number (input "Guess a number from 1 to 100: ")
+    out(output "Guess a number from 1 to 100: ")
+    guess : number(in(input))
     check answer attempts guess
 .
 
@@ -1934,8 +1958,8 @@ local rebinding
 
     if
         guess == answer >>
-            print "Correct!"
-            print ("Attempts: " + text attempts)
+            out(output "Correct!\n")
+            out(output ("Attempts: " + text(attempts) + "\n"))
 
         else >>
             message :
@@ -1944,7 +1968,7 @@ local rebinding
                     else           >> "Too high."
                 .
 
-            print message
+            out(output (message + "\n"))
             ask answer attempts
     .
 .
