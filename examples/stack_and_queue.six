@@ -1,5 +1,17 @@
 # A Group is all you need for both a stack and a queue (spec §45-46).
 
+# Render a flat Group as "[a b c]" through the output channel.
+:show(g)
+    out(output _join(g 0 "[") + "]\n")
+.
+:_join(g i acc)
+    if
+        i >= size(g) >> acc
+        i == 0 >> _join(g (i + 1) acc + text(g[i]))
+        else >> _join(g (i + 1) acc + " " + text(g[i]))
+    .
+.
+
 # Stack: push with insert, pop from the end ($).
 stack : []
 insert(stack 10)
@@ -7,8 +19,8 @@ insert(stack 20)
 insert(stack 30)
 value : stack[$]
 remove(stack $)
-print(stack)
-print(value)
+show(stack)
+out(output text(value) + "\n")
 
 # Queue: enqueue with insert, dequeue from the front (0).
 queue : []
@@ -17,5 +29,5 @@ insert(queue "B")
 insert(queue "C")
 first : queue[0]
 remove(queue 0)
-print(queue)
-print(first)
+show(queue)
+out(output first + "\n")

@@ -1,6 +1,18 @@
 # map / filter / fold / find are not built in — you write them in Six.
 # (spec §39-42, transcribed into the canonical call syntax.)
 
+# Render a flat Group as "[a b c]" through the output channel.
+:show(g)
+    out(output _join(g 0 "[") + "]\n")
+.
+:_join(g i acc)
+    if
+        i >= size(g) >> acc
+        i == 0 >> _join(g (i + 1) acc + text(g[i]))
+        else >> _join(g (i + 1) acc + " " + text(g[i]))
+    .
+.
+
 :fold(list init f i)
     if
         i >= size(list) >> init
@@ -55,8 +67,8 @@
     x > 5
 .
 
-print(map([1 2 3 4 5] double 0 []))
-print(filter([1 2 3 4 5 6 7 8] even? 0 []))
-print(fold([1 2 3 4 5] 0 add 0))
-print(find([1 2 3 4 5 6 7 8] greater-than-five? 0))
-print(find([1 2 3 4 5] greater-than-five? 0))
+show(map([1 2 3 4 5] double 0 []))
+show(filter([1 2 3 4 5 6 7 8] even? 0 []))
+out(output text(fold([1 2 3 4 5] 0 add 0)) + "\n")
+out(output text(find([1 2 3 4 5 6 7 8] greater-than-five? 0)) + "\n")
+out(output text(find([1 2 3 4 5] greater-than-five? 0)) + "\n")
