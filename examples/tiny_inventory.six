@@ -205,29 +205,29 @@ inventory : [
     out(output 
         "Cases: " + text(cases)
         + ", loose: " + text(loose)
-     + "\n")
+     "\n")
 .
 
 
 :status(item)
     if any
         warnings and item["qty"] == 0 >>
-            out(output "  OUT OF STOCK" + "\n")
+            out(output "  OUT OF STOCK" "\n")
 
         warnings and item["qty"] > 0 and item["qty"] <= LOW_STOCK >>
-            out(output "  Low stock" + "\n")
+            out(output "  Low stock" "\n")
 
         item["qty"] != 0 and item["qty"] % item["case"] != 0 >>
-            out(output "  Loose units" + "\n")
+            out(output "  Loose units" "\n")
 
         item["price"] >= HIGH_VALUE >>
-            out(output "  High-value item" + "\n")
+            out(output "  High-value item" "\n")
 
         not has(item "note") >>
-            out(output "  No note" + "\n")
+            out(output "  No note" "\n")
 
         else >>
-            out(output "  Normal" + "\n")
+            out(output "  Normal" "\n")
     .
 .
 
@@ -241,7 +241,7 @@ inventory : [
         + money(item["price"])
         + " = "
         + money(item-value(item))
-     + "\n")
+     "\n")
 
     status(item)
 .
@@ -250,49 +250,49 @@ inventory : [
 :show-field(item key)
     if
         has(item key) >>
-            out(output key + ": " + text(item[key]) + "\n")
+            out(output key + ": " + text(item[key]) "\n")
 
         else >>
-            out(output key + ": -" + "\n")
+            out(output key + ": -" "\n")
     .
 .
 
 
 :list()
-    out(output "" + "\n")
-    out(output TITLE + "\n")
-    out(output "--------------" + "\n")
+    out(output "" "\n")
+    out(output TITLE "\n")
+    out(output "--------------" "\n")
 
     if
-        size(inventory) == 0 >> out(output "Inventory is empty." + "\n")
+        size(inventory) == 0 >> out(output "Inventory is empty." "\n")
         else >> each(inventory show-item 0)
     .
 
-    out(output "" + "\n")
+    out(output "" "\n")
 .
 
 
 :summary()
-    out(output "" + "\n")
+    out(output "" "\n")
 
     total : total-value(inventory 0 0)
 
-    out(output money(total) + "\n")
+    out(output money(total) "\n")
 
-    out(output "Average item value: " + money(average-value()) + "\n")
-    out(output "Average stock: " + text(average-stock()) + " units" + "\n")
+    out(output "Average item value: " + money(average-value()) "\n")
+    out(output "Average stock: " + text(average-stock()) + " units" "\n")
 
     if
         total > MAX_INVENTORY_VALUE >>
-            out(output "Inventory exceeds target value." + "\n")
+            out(output "Inventory exceeds target value." "\n")
     .
 
     if
-        last_sale == .. >> out(output "No sales yet." + "\n")
-        else >> out(output "Last sale: " + money(last_sale) + "\n")
+        last_sale == .. >> out(output "No sales yet." "\n")
+        else >> out(output "Last sale: " + money(last_sale) "\n")
     .
 
-    out(output "" + "\n")
+    out(output "" "\n")
 .
 
 
@@ -300,32 +300,32 @@ inventory : [
     predicate : at-most(LOW_STOCK)
     items : matching(inventory predicate)
 
-    out(output "" + "\n")
-    out(output "LOW STOCK" + "\n")
-    out(output "---------" + "\n")
+    out(output "" "\n")
+    out(output "LOW STOCK" "\n")
+    out(output "---------" "\n")
 
     if
-        size(items) == 0 >> out(output "Nothing is low." + "\n")
+        size(items) == 0 >> out(output "Nothing is low." "\n")
         else >> each(items show-item 0)
     .
 
-    out(output "" + "\n")
+    out(output "" "\n")
 .
 
 
 :priority-report()
     items : matching(inventory priority)
 
-    out(output "" + "\n")
-    out(output "PRIORITY" + "\n")
-    out(output "--------" + "\n")
+    out(output "" "\n")
+    out(output "PRIORITY" "\n")
+    out(output "--------" "\n")
 
     if
-        size(items) == 0 >> out(output "No priority items." + "\n")
+        size(items) == 0 >> out(output "No priority items." "\n")
         else >> each(items show-item 0)
     .
 
-    out(output "" + "\n")
+    out(output "" "\n")
 .
 
 
@@ -335,14 +335,14 @@ inventory : [
 
     if
         size(value) == 0 >>
-            out(output "No initial entered." + "\n")
+            out(output "No initial entered." "\n")
 
         else >>
             predicate : starts-with(value[0])
             items : matching(inventory predicate)
 
             if
-                size(items) == 0 >> out(output "No matching items." + "\n")
+                size(items) == 0 >> out(output "No matching items." "\n")
                 else >> each(items show-item 0)
             .
     .
@@ -352,23 +352,23 @@ inventory : [
 :latest()
     if
         size(inventory) == 0 >>
-            out(output "Inventory is empty." + "\n")
+            out(output "Inventory is empty." "\n")
 
         else >>
-            out(output "" + "\n")
-            out(output "LATEST ITEM" + "\n")
-            out(output "-----------" + "\n")
+            out(output "" "\n")
+            out(output "LATEST ITEM" "\n")
+            out(output "-----------" "\n")
             show-item(inventory[$])
-            out(output "" + "\n")
+            out(output "" "\n")
     .
 .
 
 
 :add-record(name qty price case)
     if
-        qty < 0 >> out(output "Quantity cannot be negative." + "\n")
-        price < 0 >> out(output "Price cannot be negative." + "\n")
-        case <= 0 >> out(output "Case size must be positive." + "\n")
+        qty < 0 >> out(output "Quantity cannot be negative." "\n")
+        price < 0 >> out(output "Price cannot be negative." "\n")
+        case <= 0 >> out(output "Case size must be positive." "\n")
 
         else >>
             i : find(inventory name 0)
@@ -376,7 +376,7 @@ inventory : [
             if
                 i >= 0 >>
                     inventory[i]["qty"] = inventory[i]["qty"] + qty
-                    out(output "Updated " + name + "." + "\n")
+                    out(output "Updated " + name + "." "\n")
 
                 else >>
                     item : [
@@ -387,7 +387,7 @@ inventory : [
                     ]
 
                     insert(inventory item)
-                    out(output "Added " + name + "." + "\n")
+                    out(output "Added " + name + "." "\n")
             .
     .
 .
@@ -422,10 +422,10 @@ inventory : [
     if
         i >= 0 >>
             remove(inventory i)
-            out(output "Removed " + name + "." + "\n")
+            out(output "Removed " + name + "." "\n")
 
         else >>
-            out(output "No item named " + name + "." + "\n")
+            out(output "No item named " + name + "." "\n")
     .
 .
 
@@ -441,14 +441,14 @@ inventory : [
             qty : number(in(input))
 
             if
-                qty < 0 >> out(output "Quantity cannot be negative." + "\n")
+                qty < 0 >> out(output "Quantity cannot be negative." "\n")
                 else >>
                     inventory[i]["qty"] = qty
-                    out(output "Quantity changed." + "\n")
+                    out(output "Quantity changed." "\n")
             .
 
         else >>
-            out(output "No item named " + name + "." + "\n")
+            out(output "No item named " + name + "." "\n")
     .
 .
 
@@ -461,10 +461,10 @@ inventory : [
     if
         i >= 0 >>
             inventory[i]["qty"]++
-            out(output "Received one " + name + "." + "\n")
+            out(output "Received one " + name + "." "\n")
 
         else >>
-            out(output "No item named " + name + "." + "\n")
+            out(output "No item named " + name + "." "\n")
     .
 .
 
@@ -476,15 +476,15 @@ inventory : [
 
     if
         i < 0 >>
-            out(output "No item named " + name + "." + "\n")
+            out(output "No item named " + name + "." "\n")
 
         inventory[i]["qty"] == 0 >>
-            out(output name + " is out of stock." + "\n")
+            out(output name + " is out of stock." "\n")
 
         else >>
             inventory[i]["qty"]--
             last_sale = inventory[i]["price"]
-            out(output "Sold one " + name + "." + "\n")
+            out(output "Sold one " + name + "." "\n")
     .
 .
 
@@ -498,10 +498,10 @@ inventory : [
         i >= 0 >>
             out(output "Note: ")
             inventory[i]["note"] = in(input)
-            out(output "Note saved." + "\n")
+            out(output "Note saved." "\n")
 
         else >>
-            out(output "No item named " + name + "." + "\n")
+            out(output "No item named " + name + "." "\n")
     .
 .
 
@@ -515,7 +515,7 @@ inventory : [
         i >= 0 >>
             item : inventory[i]
 
-            out(output "" + "\n")
+            out(output "" "\n")
             show-field(item "name")
             show-field(item "qty")
             show-field(item "price")
@@ -523,14 +523,14 @@ inventory : [
             show-field(item "note")
             show-cases(item)
 
-            out(output "Value: " + money(item-value(item)) + "\n")
-            out(output "Reorder cases: " + text(reorder-cases(item)) + "\n")
+            out(output "Value: " + money(item-value(item)) "\n")
+            out(output "Reorder cases: " + text(reorder-cases(item)) "\n")
 
             status(item)
-            out(output "" + "\n")
+            out(output "" "\n")
 
         else >>
-            out(output "Not found." + "\n")
+            out(output "Not found." "\n")
     .
 .
 
@@ -549,7 +549,7 @@ inventory : [
 
             if
                 qty < 0 >>
-                    out(output "Quantity cannot be negative." + "\n")
+                    out(output "Quantity cannot be negative." "\n")
 
                 else >>
                     preview[i]["qty"] = preview[i]["qty"] + qty
@@ -557,16 +557,16 @@ inventory : [
                     out(output 
                         "Current value: "
                         + money(total-value(inventory 0 0))
-                     + "\n")
+                     "\n")
 
                     out(output 
                         "Projected value: "
                         + money(total-value(preview 0 0))
-                     + "\n")
+                     "\n")
             .
 
         else >>
-            out(output "No item named " + name + "." + "\n")
+            out(output "No item named " + name + "." "\n")
     .
 .
 
@@ -575,34 +575,34 @@ inventory : [
     if
         warnings >>
             warnings = false
-            out(output "Warnings off." + "\n")
+            out(output "Warnings off." "\n")
 
         else >>
             warnings = true
-            out(output "Warnings on." + "\n")
+            out(output "Warnings on." "\n")
     .
 .
 
 
 :menu()
-    out(output "" + "\n")
-    out(output "1. List inventory" + "\n")
-    out(output "2. Add item" + "\n")
-    out(output "3. Change quantity" + "\n")
-    out(output "4. Receive one" + "\n")
-    out(output "5. Sell one" + "\n")
-    out(output "6. Remove item" + "\n")
-    out(output "7. Inspect item" + "\n")
-    out(output "8. Add note" + "\n")
-    out(output "9. Low-stock report" + "\n")
-    out(output "10. Priority report" + "\n")
-    out(output "11. Items by initial" + "\n")
-    out(output "12. Latest item" + "\n")
-    out(output "13. Inventory summary" + "\n")
-    out(output "14. Preview restock" + "\n")
-    out(output "15. Toggle warnings" + "\n")
-    out(output "16. Quit" + "\n")
-    out(output "" + "\n")
+    out(output "" "\n")
+    out(output "1. List inventory" "\n")
+    out(output "2. Add item" "\n")
+    out(output "3. Change quantity" "\n")
+    out(output "4. Receive one" "\n")
+    out(output "5. Sell one" "\n")
+    out(output "6. Remove item" "\n")
+    out(output "7. Inspect item" "\n")
+    out(output "8. Add note" "\n")
+    out(output "9. Low-stock report" "\n")
+    out(output "10. Priority report" "\n")
+    out(output "11. Items by initial" "\n")
+    out(output "12. Latest item" "\n")
+    out(output "13. Inventory summary" "\n")
+    out(output "14. Preview restock" "\n")
+    out(output "15. Toggle warnings" "\n")
+    out(output "16. Quit" "\n")
+    out(output "" "\n")
 .
 
 
@@ -673,10 +673,10 @@ inventory : [
             run()
 
         choice == "16" >>
-            out(output "Goodbye." + "\n")
+            out(output "Goodbye." "\n")
 
         else >>
-            out(output "Unknown choice." + "\n")
+            out(output "Unknown choice." "\n")
             run()
     .
 .

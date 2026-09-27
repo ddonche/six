@@ -3,6 +3,22 @@
 Every fix or feature bumps the version — including REPL changes. `six --version`,
 the REPL banner, and `six --help` all report it.
 
+## v0.1.13
+- `out` is now variadic and the output/error channels render any value. The
+  channels take `out(target value …)` — one or more values — and render each
+  with the display formatter (a Group as `[1 2 3]`, a number as `5`, text as
+  itself), emitting them in order with nothing inserted and no automatic
+  newline. So `out(output x "\n")` is the value-preserving replacement for the
+  old `print(x)`, for every value `x`, with no `text()` ceremony.
+  - `text()` is unchanged; conversion is not something the programmer must write.
+  - `out` never appends a newline, so partial/raw output still works
+    (`out(output x)`).
+  - Other relationships keep their own contract: file/network/process still take
+    exactly one outbound value of the type they accept.
+  - Examples updated to `out(output x "\n")`; the collection examples now render
+    their Groups again. (Console line-input — the old `input()` behavior — is a
+    separate change, not addressed here.)
+
 ## v0.1.12
 - Examples: redo the print/input migration as a minimal change and nothing more.
   The v0.1.10 pass had rewritten example structure beyond removing print/input —

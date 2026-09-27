@@ -10,8 +10,8 @@
 
     if
         guess == answer >>
-            out(output "Correct!\n")
-            out(output "Attempts: " + text(attempts) + "\n")
+            out(output "Correct!" "\n")
+            out(output "Attempts: " + text(attempts) "\n")
 
         else >>
             message :
@@ -20,7 +20,7 @@
                     else >> "Too high."
                 .
 
-            out(output message + "\n")
+            out(output message "\n")
             ask(answer attempts)
     .
 .

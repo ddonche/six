@@ -127,8 +127,9 @@ Functions are declared with a statement-initial colon: :name(params) … .
 
 There is no print and no input. All I/O — the console, files, networks,
 processes, devices, the clock, and randomness — goes through the six host
-builtins (open, in, out, close, entropy, time). Write a console line with
-out(output "…") and read one chunk with in(input). See section 38.1.
+builtins (open, in, out, close, entropy, time). The output channel renders any
+value, so out(output x "\n") replaces the old print(x); read a chunk with
+in(input). See section 38.1.
 
 
 
@@ -1728,7 +1729,9 @@ Four are the relationship and information-flow primitives:
 
 open(target)       establish a persistent external relationship.
 in(target)         obtain externally sourced information.
-out(target value)  transmit information or intent outward.
+out(target value …) transmit one or more values outward (each relationship
+                   decides what it accepts; the output/error channels render any
+                   value, in order, with no separator or newline).
 close(target)      end Six's relationship with the target.
 
 A target is an ordinary Group. A bare descriptor Group names a resource; once
@@ -1741,9 +1744,13 @@ Runtime channels. Three relationships are pre-bound before any user code:
 input              in(input) reads the next chunk of console text as Text,
                    buffering a UTF-8 character split across reads; .. at end of
                    input. (out/open on input is an error.)
-output             out(output text) writes Text to standard output, adding no
-                   newline. (in/open on output is an error.)
-error              out(error text) writes Text to standard error.
+output             out(output value …) writes to standard output. It takes one
+                   or more values, renders each with the display formatter (a
+                   Group as [1 2 3], a number as 5, text as itself), and emits
+                   them in order with nothing inserted and no automatic newline.
+                   So out(output x "\n") is the value-preserving replacement for
+                   the old print(x). (in/open on output is an error.)
+error              out(error value …) writes to standard error the same way.
 
 Domains reached through descriptor Groups:
 

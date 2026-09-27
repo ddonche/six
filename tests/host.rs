@@ -30,9 +30,22 @@ fn error_channel_is_separate_from_output() {
 }
 
 #[test]
-fn output_channel_accepts_only_text() {
-    assert!(err("out(output 5)").contains("only text"));
-    assert!(err("out(output [1 2])").contains("only text"));
+fn output_channel_renders_any_value() {
+    // The output/error channels render any value with the display formatter.
+    assert_eq!(out("out(output 5)"), "5");
+    assert_eq!(out("out(output [1 2 3])"), "[1 2 3]");
+    assert_eq!(out("out(output [[\"a\" 1] [\"b\" 2]])"), "[[\"a\" 1] [\"b\" 2]]");
+    assert_eq!(out("out(output ..)"), "nil");
+}
+
+#[test]
+fn output_channel_is_variadic_with_no_separator() {
+    // Several values render in order with nothing inserted; no trailing newline.
+    assert_eq!(out("out(output \"n = \" 5 \" g = \" [1 2])"), "n = 5 g = [1 2]");
+    // out(output x "\n") is the value-preserving replacement for print(x).
+    assert_eq!(out("out(output [1 2] \"\\n\")"), "[1 2]\n");
+    // A bare out needs at least one value after the target.
+    assert!(err("out(output)").contains("at least 2"));
 }
 
 #[test]

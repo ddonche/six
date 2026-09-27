@@ -55,8 +55,8 @@
     x > 5
 .
 
-out(output map([1 2 3 4 5] double 0 []))
-out(output filter([1 2 3 4 5 6 7 8] even? 0 []))
-out(output text(fold([1 2 3 4 5] 0 add 0)) + "\n")
-out(output text(find([1 2 3 4 5 6 7 8] greater-than-five? 0)) + "\n")
-out(output text(find([1 2 3 4 5] greater-than-five? 0)) + "\n")
+out(output map([1 2 3 4 5] double 0 []) "\n")
+out(output filter([1 2 3 4 5 6 7 8] even? 0 []) "\n")
+out(output fold([1 2 3 4 5] 0 add 0) "\n")
+out(output find([1 2 3 4 5 6 7 8] greater-than-five? 0) "\n")
+out(output find([1 2 3 4 5] greater-than-five? 0) "\n")

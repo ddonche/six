@@ -2,15 +2,15 @@
 # Everything after is ordinary Six: keyed Group access and calls.
 @hero
 
-out(output hero["name"] + " enters with " + text(hero["health"]) + " health\n")
+out(output hero["name"] + " enters with " + text(hero["health"]) + " health" "\n")
 
 hero["damage"](30)
-out(output "After a hit: " + text(hero["health"]) + "\n")
+out(output "After a hit: " + text(hero["health"]) "\n")
 
 hero["heal"](10)
-out(output "After a potion: " + text(hero["health"]) + "\n")
+out(output "After a potion: " + text(hero["health"]) "\n")
 
 # A module function is an ordinary value — bind it and call it locally.
 hit : hero["damage"]
 hit(hero["health"])
-out(output "Final blow — health: " + text(hero["health"]) + "\n")
+out(output "Final blow — health: " + text(hero["health"]) "\n")

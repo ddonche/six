@@ -45,8 +45,8 @@ pub fn dispatch(interp: &mut Interpreter, name: &str, args: Vec<Value>, line: us
             interp.host_in(&args[0], line)
         }
         "out" => {
-            arity("out", &args, 2, 2, line)?;
-            interp.host_out(&args[0], &args[1], line)
+            arity("out", &args, 2, usize::MAX, line)?;
+            interp.host_out(&args[0], &args[1..], line)
         }
         "close" => {
             arity("close", &args, 1, 1, line)?;
@@ -58,7 +58,13 @@ pub fn dispatch(interp: &mut Interpreter, name: &str, args: Vec<Value>, line: us
 
 fn arity(name: &str, args: &[Value], min: usize, max: usize, line: usize) -> Result<()> {
     if args.len() < min || args.len() > max {
-        let want = if min == max { format!("{}", min) } else { format!("{} to {}", min, max) };
+        let want = if min == max {
+            format!("{}", min)
+        } else if max == usize::MAX {
+            format!("at least {}", min)
+        } else {
+            format!("{} to {}", min, max)
+        };
         return Err(SixError::at(
             line,
             format!("'{}' expects {} argument(s) but got {}", name, want, args.len()),

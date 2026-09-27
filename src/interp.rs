@@ -806,7 +806,8 @@ impl Interpreter {
         }
     }
 
-    fn descriptor_out(&mut self, g: &GroupRef, value: &Value, line: usize) -> Result<Value> {
+    fn descriptor_out(&mut self, g: &GroupRef, values: &[Value], line: usize) -> Result<Value> {
+        let value = single_out_value(values, line)?;
         let items: Vec<Value> = g.items.borrow().iter().cloned().collect();
         match domain_of(&items) {
             Some("file") => crate::host::file_out(&items, value, line),
@@ -833,7 +834,7 @@ impl Interpreter {
         }
     }
 
-    pub fn host_out(&mut self, target: &Value, value: &Value, line: usize) -> Result<Value> {
+    pub fn host_out(&mut self, target: &Value, values: &[Value], line: usize) -> Result<Value> {
         use crate::host::Assoc;
         let g = self.as_host_group(target, "out", line)?;
         {
@@ -841,17 +842,20 @@ impl Interpreter {
             match a.as_deref() {
                 None => {
                     drop(a);
-                    return self.descriptor_out(&g, value, line);
+                    return self.descriptor_out(&g, values, line);
                 }
                 Some(Assoc::Closed) => return Err(SixError::at(line, "out: relationship is closed")),
                 Some(Assoc::RuntimeInput) => return Err(SixError::at(line, "out: cannot write to the input channel")),
+                // The output/error channels take any number of values and render
+                // each with the display formatter; nothing is inserted between
+                // them and no newline is appended.
                 Some(Assoc::RuntimeOutput) => {
                     drop(a);
-                    return self.write_channel(value, false, line);
+                    return self.write_channel(values, false, line);
                 }
                 Some(Assoc::RuntimeError) => {
                     drop(a);
-                    return self.write_channel(value, true, line);
+                    return self.write_channel(values, true, line);
                 }
                 Some(Assoc::TcpListener(_)) => return Err(SixError::at(line, "out: a TCP listener does not support out")),
                 Some(Assoc::ChildOutput(_)) => return Err(SixError::at(line, "out: a child output channel does not support out")),
@@ -860,6 +864,9 @@ impl Interpreter {
                 Some(Assoc::ChildProc(_)) | Some(Assoc::ChildInput(_)) => {}
             }
         }
+        // Every other relationship follows its own contract, which today accepts
+        // exactly one outbound value.
+        let value = single_out_value(values, line)?;
         let mut a = g.assoc.borrow_mut();
         match a.as_deref_mut() {
             Some(Assoc::Tcp(c)) => crate::host::tcp_out(c, value, line),
@@ -902,19 +909,18 @@ impl Interpreter {
         }
     }
 
-    /// Write Six Text to the output (or error) channel. Adds no newline.
-    fn write_channel(&mut self, value: &Value, is_err: bool, line: usize) -> Result<Value> {
-        let text = match value {
-            Value::Text(s) => s.clone(),
-            other => {
-                return Err(SixError::at(
-                    line,
-                    format!("out: the output/error channel accepts only text, not a {}", other.type_name()),
-                ));
-            }
-        };
+    /// Write one or more values to the output (or error) channel. Each value is
+    /// rendered with the display formatter (a Group as `[1 2 3]`, a number as
+    /// `5`, text as itself) and the renderings are emitted in order with nothing
+    /// inserted between them and no trailing newline. `out(output x "\n")` is
+    /// therefore the value-preserving replacement for the old `print(x)`.
+    fn write_channel(&mut self, values: &[Value], is_err: bool, line: usize) -> Result<Value> {
+        let mut buf = String::new();
+        for v in values {
+            buf.push_str(&crate::format::display(v));
+        }
         let w: &mut dyn Write = if is_err { &mut self.err } else { &mut self.out };
-        w.write_all(text.as_bytes())
+        w.write_all(buf.as_bytes())
             .map_err(|e| SixError::at(line, format!("out: host write failed: {}", e)))?;
         let _ = w.flush();
         Ok(Value::Empty)
@@ -948,6 +954,18 @@ impl Interpreter {
             }
             // Only an incomplete character so far — read more.
         }
+    }
+}
+
+/// A relationship other than the output/error channels accepts exactly one
+/// outbound value; extract it, or report the arity mismatch.
+fn single_out_value<'a>(values: &'a [Value], line: usize) -> Result<&'a Value> {
+    match values {
+        [v] => Ok(v),
+        _ => Err(SixError::at(
+            line,
+            format!("out: this relationship accepts exactly one outbound value, not {}", values.len()),
+        )),
     }
 }
 
