@@ -2,11 +2,11 @@
 
 # Initial binding.
 count : 1
-out(output text(count) + "\n")
+print(count)
 
 # Rebinding.
 count = count + 1
-out(output text(count) + "\n")
+print(count)
 
 # A nested Group.
 original : [
@@ -23,7 +23,6 @@ copied :: original
 # Change the first value inside the first nested Group through the alias.
 alias[0][0] = 99
 
-# original and alias share one Group (both now 99); copied is independent (still 1).
-out(output text(original[0][0]) + "\n")
-out(output text(alias[0][0]) + "\n")
-out(output text(copied[0][0]) + "\n")
+print(original)
+print(alias)
+print(copied)
