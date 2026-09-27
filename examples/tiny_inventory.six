@@ -40,28 +40,6 @@ A flow may continue across lines when >> shows that
 the expression is not yet complete.
 ##
 
-# `line` writes text plus a newline (what print did); `ask` prints a prompt and
-# returns one line of input with the trailing newline removed (what input did).
-:line(s)
-    out(output s)
-    out(output "\n")
-.
-
-:ask(prompt)
-    out(output prompt)
-    _chomp(in(input) 0 "")
-.
-
-:_chomp(s i acc)
-    if
-        i >= size(s) >> acc
-        s[i] == "\n" >> acc
-        s[i] == "\r" >> acc
-        else >> _chomp(s (i + 1) acc + s[i])
-    .
-.
-
-
 TITLE : "Tiny Inventory"
 LOW_STOCK : 3
 TARGET_STOCK : 12
@@ -224,7 +202,7 @@ inventory : [
     cases : (item["qty"] / item["case"])_
     loose : item["qty"] % item["case"]
 
-    line(
+    print(
         "Cases: " + text(cases)
         + ", loose: " + text(loose)
     )
@@ -234,28 +212,28 @@ inventory : [
 :status(item)
     if any
         warnings and item["qty"] == 0 >>
-            line("  OUT OF STOCK")
+            print("  OUT OF STOCK")
 
         warnings and item["qty"] > 0 and item["qty"] <= LOW_STOCK >>
-            line("  Low stock")
+            print("  Low stock")
 
         item["qty"] != 0 and item["qty"] % item["case"] != 0 >>
-            line("  Loose units")
+            print("  Loose units")
 
         item["price"] >= HIGH_VALUE >>
-            line("  High-value item")
+            print("  High-value item")
 
         not has(item "note") >>
-            line("  No note")
+            print("  No note")
 
         else >>
-            line("  Normal")
+            print("  Normal")
     .
 .
 
 
 :show-item(item)
-    line(
+    print(
         item["name"]
         + " - "
         + text(item["qty"])
@@ -272,51 +250,51 @@ inventory : [
 :show-field(item key)
     if
         has(item key) >>
-            line(key + ": " + text(item[key]))
+            print(key + ": " + text(item[key]))
 
         else >>
-            line(key + ": -")
+            print(key + ": -")
     .
 .
 
 
 :list()
-    line("")
-    line(TITLE)
-    line("--------------")
+    print("")
+    print(TITLE)
+    print("--------------")
 
     if
-        size(inventory) == 0 >> line("Inventory is empty.")
+        size(inventory) == 0 >> print("Inventory is empty.")
         else >> each(inventory show-item 0)
     .
 
-    line("")
+    print("")
 .
 
 
 :summary()
-    line("")
+    print("")
 
     total : total-value(inventory 0 0)
 
     total >>
     money() >>
-    line()
+    print()
 
-    line("Average item value: " + money(average-value()))
-    line("Average stock: " + text(average-stock()) + " units")
+    print("Average item value: " + money(average-value()))
+    print("Average stock: " + text(average-stock()) + " units")
 
     if
         total > MAX_INVENTORY_VALUE >>
-            line("Inventory exceeds target value.")
+            print("Inventory exceeds target value.")
     .
 
     if
-        last_sale == .. >> line("No sales yet.")
-        else >> line("Last sale: " + money(last_sale))
+        last_sale == .. >> print("No sales yet.")
+        else >> print("Last sale: " + money(last_sale))
     .
 
-    line("")
+    print("")
 .
 
 
@@ -324,48 +302,48 @@ inventory : [
     predicate : at-most(LOW_STOCK)
     items : matching(inventory predicate)
 
-    line("")
-    line("LOW STOCK")
-    line("---------")
+    print("")
+    print("LOW STOCK")
+    print("---------")
 
     if
-        size(items) == 0 >> line("Nothing is low.")
+        size(items) == 0 >> print("Nothing is low.")
         else >> each(items show-item 0)
     .
 
-    line("")
+    print("")
 .
 
 
 :priority-report()
     items : matching(inventory priority)
 
-    line("")
-    line("PRIORITY")
-    line("--------")
+    print("")
+    print("PRIORITY")
+    print("--------")
 
     if
-        size(items) == 0 >> line("No priority items.")
+        size(items) == 0 >> print("No priority items.")
         else >> each(items show-item 0)
     .
 
-    line("")
+    print("")
 .
 
 
 :initial-report()
-    value : ask("Initial: ")
+    value : input("Initial: ")
 
     if
         size(value) == 0 >>
-            line("No initial entered.")
+            print("No initial entered.")
 
         else >>
             predicate : starts-with(value[0])
             items : matching(inventory predicate)
 
             if
-                size(items) == 0 >> line("No matching items.")
+                size(items) == 0 >> print("No matching items.")
                 else >> each(items show-item 0)
             .
     .
@@ -375,23 +353,23 @@ inventory : [
 :latest()
     if
         size(inventory) == 0 >>
-            line("Inventory is empty.")
+            print("Inventory is empty.")
 
         else >>
-            line("")
-            line("LATEST ITEM")
-            line("-----------")
+            print("")
+            print("LATEST ITEM")
+            print("-----------")
             show-item(inventory[$])
-            line("")
+            print("")
     .
 .
 
 
 :add-record(name qty price case)
     if
-        qty < 0 >> line("Quantity cannot be negative.")
-        price < 0 >> line("Price cannot be negative.")
-        case <= 0 >> line("Case size must be positive.")
+        qty < 0 >> print("Quantity cannot be negative.")
+        price < 0 >> print("Price cannot be negative.")
+        case <= 0 >> print("Case size must be positive.")
 
         else >>
             i : find(inventory name 0)
@@ -399,7 +377,7 @@ inventory : [
             if
                 i >= 0 >>
                     inventory[i]["qty"] = inventory[i]["qty"] + qty
-                    line("Updated " + name + ".")
+                    print("Updated " + name + ".")
 
                 else >>
                     item : [
@@ -410,7 +388,7 @@ inventory : [
                     ]
 
                     insert(inventory item)
-                    line("Added " + name + ".")
+                    print("Added " + name + ".")
             .
     .
 .
@@ -418,10 +396,10 @@ inventory : [
 
 :add-item()
     record : [
-        ask("Item: ")
-        number(ask("Quantity: "))
-        number(ask("Price: "))
-        number(ask("Case size: "))
+        input("Item: ")
+        number(input("Quantity: "))
+        number(input("Price: "))
+        number(input("Case size: "))
     ]
 
     add-record(<record>)
@@ -429,99 +407,99 @@ inventory : [
 
 
 :remove-item()
-    name : ask("Remove item: ")
+    name : input("Remove item: ")
     i : find(inventory name 0)
 
     if
         i >= 0 >>
             remove(inventory i)
-            line("Removed " + name + ".")
+            print("Removed " + name + ".")
 
         else >>
-            line("No item named " + name + ".")
+            print("No item named " + name + ".")
     .
 .
 
 
 :change-quantity()
-    name : ask("Item: ")
+    name : input("Item: ")
     i : find(inventory name 0)
 
     if
         i >= 0 >>
-            qty : number(ask("New quantity: "))
+            qty : number(input("New quantity: "))
 
             if
-                qty < 0 >> line("Quantity cannot be negative.")
+                qty < 0 >> print("Quantity cannot be negative.")
                 else >>
                     inventory[i]["qty"] = qty
-                    line("Quantity changed.")
+                    print("Quantity changed.")
             .
 
         else >>
-            line("No item named " + name + ".")
+            print("No item named " + name + ".")
     .
 .
 
 
 :receive-one()
-    name : ask("Receive item: ")
+    name : input("Receive item: ")
     i : find(inventory name 0)
 
     if
         i >= 0 >>
             inventory[i]["qty"]++
-            line("Received one " + name + ".")
+            print("Received one " + name + ".")
 
         else >>
-            line("No item named " + name + ".")
+            print("No item named " + name + ".")
     .
 .
 
 
 :sell-one()
-    name : ask("Sell item: ")
+    name : input("Sell item: ")
     i : find(inventory name 0)
 
     if
         i < 0 >>
-            line("No item named " + name + ".")
+            print("No item named " + name + ".")
 
         inventory[i]["qty"] == 0 >>
-            line(name + " is out of stock.")
+            print(name + " is out of stock.")
 
         else >>
             inventory[i]["qty"]--
             last_sale = inventory[i]["price"]
-            line("Sold one " + name + ".")
+            print("Sold one " + name + ".")
     .
 .
 
 
 :add-note()
-    name : ask("Item: ")
+    name : input("Item: ")
     i : find(inventory name 0)
 
     if
         i >= 0 >>
-            inventory[i]["note"] = ask("Note: ")
-            line("Note saved.")
+            inventory[i]["note"] = input("Note: ")
+            print("Note saved.")
 
         else >>
-            line("No item named " + name + ".")
+            print("No item named " + name + ".")
     .
 .
 
 
 :inspect()
-    name : ask("Item: ")
+    name : input("Item: ")
     i : find(inventory name 0)
 
     if
         i >= 0 >>
             item : inventory[i]
 
-            line("")
+            print("")
             show-field(item "name")
             show-field(item "qty")
             show-field(item "price")
@@ -529,14 +507,14 @@ inventory : [
             show-field(item "note")
             show-cases(item)
 
-            line("Value: " + money(item-value(item)))
-            line("Reorder cases: " + text(reorder-cases(item)))
+            print("Value: " + money(item-value(item)))
+            print("Reorder cases: " + text(reorder-cases(item)))
 
             status(item)
-            line("")
+            print("")
 
         else >>
-            line("Not found.")
+            print("Not found.")
     .
 .
 
@@ -544,33 +522,33 @@ inventory : [
 :preview-restock()
     preview :: inventory
 
-    name : ask("Preview item: ")
+    name : input("Preview item: ")
     i : find(preview name 0)
 
     if
         i >= 0 >>
-            qty : number(ask("Units to receive: "))
+            qty : number(input("Units to receive: "))
 
             if
                 qty < 0 >>
-                    line("Quantity cannot be negative.")
+                    print("Quantity cannot be negative.")
 
                 else >>
                     preview[i]["qty"] = preview[i]["qty"] + qty
 
-                    line(
+                    print(
                         "Current value: "
                         + money(total-value(inventory 0 0))
                     )
 
-                    line(
+                    print(
                         "Projected value: "
                         + money(total-value(preview 0 0))
                     )
             .
 
         else >>
-            line("No item named " + name + ".")
+            print("No item named " + name + ".")
     .
 .
 
@@ -579,40 +557,40 @@ inventory : [
     if
         warnings >>
             warnings = false
-            line("Warnings off.")
+            print("Warnings off.")
 
         else >>
             warnings = true
-            line("Warnings on.")
+            print("Warnings on.")
     .
 .
 
 
 :menu()
-    line("")
-    line("1. List inventory")
-    line("2. Add item")
-    line("3. Change quantity")
-    line("4. Receive one")
-    line("5. Sell one")
-    line("6. Remove item")
-    line("7. Inspect item")
-    line("8. Add note")
-    line("9. Low-stock report")
-    line("10. Priority report")
-    line("11. Items by initial")
-    line("12. Latest item")
-    line("13. Inventory summary")
-    line("14. Preview restock")
-    line("15. Toggle warnings")
-    line("16. Quit")
-    line("")
+    print("")
+    print("1. List inventory")
+    print("2. Add item")
+    print("3. Change quantity")
+    print("4. Receive one")
+    print("5. Sell one")
+    print("6. Remove item")
+    print("7. Inspect item")
+    print("8. Add note")
+    print("9. Low-stock report")
+    print("10. Priority report")
+    print("11. Items by initial")
+    print("12. Latest item")
+    print("13. Inventory summary")
+    print("14. Preview restock")
+    print("15. Toggle warnings")
+    print("16. Quit")
+    print("")
 .
 
 
 :run()
     menu()
-    choice : ask("> ")
+    choice : input("> ")
 
     if
         choice == "1" >>
@@ -676,10 +654,10 @@ inventory : [
             run()
 
         choice == "16" >>
-            line("Goodbye.")
+            print("Goodbye.")
 
         else >>
-            line("Unknown choice.")
+            print("Unknown choice.")
             run()
     .
 .
