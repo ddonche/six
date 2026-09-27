@@ -3,6 +3,17 @@
 Every fix or feature bumps the version — including REPL changes. `six --version`,
 the REPL banner, and `six --help` all report it.
 
+## v0.1.11
+- Docs: rewrite every code example in the embedded spec (`six spec`) into the
+  canonical surface syntax the runtime actually accepts. The spec had been
+  written in a pre-canonical notation — `>> name: [params] >>` function
+  declarations and whitespace calls (`add 2 3`, `insert stack value`) — none of
+  which parses. All ~30 examples now use `:name(params) … .` declarations and
+  parenthesised calls `f(a b c)`; §10 and §21 document that whitespace separates
+  Group members / call arguments and that the opening parenthesis must sit
+  immediately against the callable (`f(x)` is a call, `f (x)` is two
+  expressions). No runtime or library behavior changed.
+
 ## v0.1.10
 - Cleanup and migration: the frozen Six surface is now final — six core builtins
   (size insert remove has number text) and six host builtins (open in out close

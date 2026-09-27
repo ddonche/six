@@ -119,9 +119,9 @@ if already handles multiple branches; there is no elif.
 
 
 Calls are parenthesised: f(a b c), with arguments separated by whitespace
-inside the parentheses. Some illustrative snippets later in this document use an
-older space-call notation (f a b c); the canonical surface is the parenthesised
-form shown in examples/tiny_inventory.six.
+inside the parentheses and the opening parenthesis immediately against the
+callable. There is no bare f x y application; a bare name is the function value.
+Functions are declared with a statement-initial colon: :name(params) … .
 
 
 
@@ -174,18 +174,18 @@ dequeue
 
 A stack is already:
 
-insert stack value
+insert(stack value)
 
 value : stack[$]
-remove stack $
+remove(stack $)
 
 
 A queue is already:
 
-insert queue value
+insert(queue value)
 
 value : queue[0]
-remove queue 0
+remove(queue 0)
 
 
 The raw operations are clearer than the borrowed abstractions.
@@ -196,17 +196,17 @@ A library function earns its name when the name communicates a useful operation 
 
 Explicitly define both forms:
 
-insert group value
+insert(group value)
 
 appends value to the end.
 
-insert group value index
+insert(group value index)
 
 inserts value at the specified position and shifts later members right.
 
 Both mutate the Group and yield empty.
 
-remove group index removes that position, shifts later members left, and yields empty.
+remove(group index) removes that position, shifts later members left, and yields empty.
 
 
 
@@ -450,13 +450,13 @@ number ..   # empty number
 
 
 
-size ..        # 0
+size(..)        # 0
 
-size nil       # 0
+size(nil)       # 0
 
-size []        # 0
+size([])        # 0
 
-size (text ..) # 0
+size(text ..)   # 0
 
 
 
@@ -678,29 +678,28 @@ Whitespace separates simple members in ordinary inline Groups:
 ["Dan" 46 true]
 
 
-Because Six also uses whitespace for function application, compound call expressions inside a Group must have a clear boundary.
+A call is written with parentheses, so a call is one member and needs no extra
+boundary:
 
-Use parentheses inline:
-
-[(name person) (age person)]
+[name(person) age(person)]
 
 
-Or use one member expression per line:
+A compound expression that is not a call is grouped with parentheses so its
+extent is clear:
+
+[(a + b) (c + d)]
+
+
+Or one member expression may be written per line:
 
 [
-    name person
-    age person
+    name(person)
+    age(person)
 ]
 
 
-This prevents ambiguous forms such as:
-
-[name person age person]
-
-
-from being interpreted by guessing function arity.
-
-Six does not inspect runtime values to determine where one expression ends and another begins.
+Six does not inspect runtime values to determine where one expression ends and
+another begins.
 
 
 
@@ -810,12 +809,12 @@ and no "middle_name" key at all.
 
 Programs that need to distinguish existence should use an operation such as:
 
-has person "middle_name"
+has(person "middle_name")
 
 
 or the equivalent dot form:
 
-person.has "middle_name"
+person.has("middle_name")
 
 
 has is a builtin: existence is semantically distinct from emptiness, and it cannot be written in Six (there is no type test to skip non-pair members, and no way to catch a missing-key read).
@@ -888,8 +887,8 @@ Attempting to replace a nonexistent positional member is an error.
 
 The fundamental mutation operations include:
 
-insert group value
-remove group index
+insert(group value)
+remove(group index)
 
 
 insert adds a member.
@@ -911,7 +910,7 @@ When a program needs both mutation and a result, it explicitly reads the value f
 Example:
 
 value : group[$]
-remove group $
+remove(group $)
 value
 
 
@@ -925,7 +924,7 @@ This avoids giving mutation operations multiple overlapping meanings.
 
 A Group may be passed whole:
 
-something config
+something(config)
 
 
 If:
@@ -933,16 +932,16 @@ If:
 config : ["Six" 100 100 800 600]
 
 
-then something config passes one argument: the Group itself.
+then something(config) passes one argument: the Group itself.
 
 A new one-member Group containing config is:
 
-something [config]
+something([config])
 
 
 To open a Group and pass its direct members as separate parameters:
 
-something <config>
+something(<config>)
 
 
 Conceptually:
@@ -1014,7 +1013,7 @@ This is an error:
 
 Convert explicitly:
 
-"Age: " + text 46
+"Age: " + text(46)
 
 
 + does not imply Group concatenation.
@@ -1027,8 +1026,8 @@ Conversions are ordinary callable operations.
 
 Examples:
 
-number x
-text x
+number(x)
+text(x)
 
 
 Conversions must be explicit.
@@ -1045,81 +1044,50 @@ x.text
 
 20. Functions
 
-Functions are declared using >>.
+A function is declared with a statement-initial `:`, a name, a parenthesised
+parameter list, an indented body, and a closing `.` on its own line.
 
 Example:
 
->> add: [x y] >>
-    x + y
+:add(a b)
+    a + b
 .
 
 
-The parameter structure:
+The parameter list:
 
-[x y]
-
-
-is not a runtime Group.
-
-It is the ordered parameter structure of the function.
+(a b)
 
 
+is not a runtime Group. It is the ordered parameter structure of the function.
 
-Clarify the two roles of >>
+A statement-initial `:` introduces a declaration; an infix `:` is a binding.
+`>>` is never part of a declaration — it is transformation flow between
+expressions (section 35):
 
-This needs to be explicit.
-
-At the beginning of a declaration:
-
->> add: [x y] >>
-    x + y
-.
-
->> name... introduces a function declaration.
-
-Between expressions:
-
-10 >>
-add 5
-
->> is transformation flow.
-
-And the key rule:
+10 >> add(5)
 
 
-
-In a transformation chain, the current flowing value becomes the first argument of the next callable stage.
-
-Therefore:
-
-x >> out(output)
-
-means:
-
-out(output x)
-
-while bare:
-
-out
-
-outside a chain is merely the function value and performs no output.
+means add(10 5). In a transformation chain, the current flowing value becomes
+the first argument of the next callable stage.
 
 
 
 20.1 Single-expression functions
 
-A function may be written compactly:
+A one-expression body may sit on the declaration line:
 
->> add: [x y] >> x + y
+:add(a b) a + b
+.
 
 
 
 
 20.2 Zero-parameter functions
 
-A function with no parameters omits the parameter structure:
+A function with no parameters still uses an empty parameter list:
 
->> greet >>
+:greet()
     out(output "Hello")
 .
 
@@ -1128,21 +1096,23 @@ A function with no parameters omits the parameter structure:
 
 21. Function Calls
 
-Function calls use whitespace.
+A call is parenthesised: the callable, then arguments separated by whitespace
+inside the parentheses.
 
-add 2 3
+add(2 3)
 out(output "Hello")
-size group
+size(group)
 
 
-No call punctuation is required.
+There is no bare `f x y` application; a bare name is the function value itself.
+The opening parenthesis must sit immediately against the callable: `f(x)` is a
+call, while `f (x)` is two separate expressions (the value `f` and the grouped
+expression `(x)`), so inside an argument list `f (x)` passes two arguments.
 
-Parentheses group nested expressions:
+Parentheses inside an argument group nested expressions:
 
-out(output (text (size values)))
+out(output text(size(values)))
 
-
-Parentheses are expression grouping, not special function-call syntax.
 
 
 
@@ -1152,7 +1122,7 @@ Functions are first-class values.
 
 Given:
 
->> square: [x] >>
+:square(x)
     x * x
 .
 
@@ -1166,14 +1136,14 @@ refers to the function value.
 
 And:
 
-square 5
+square(5)
 
 
 calls it.
 
 Functions may be passed to other functions:
 
-apply square 5
+apply(square 5)
 
 
 
@@ -1182,11 +1152,12 @@ apply square 5
 
 Six has no return keyword.
 
-A function produces the value of the result expression deliberately left at the end of its body.
+A function evaluates to its final expression; the programmer chooses the result
+by deliberately making that expression last.
 
 Example:
 
->> first: [group] >>
+:first(group)
     group[0]
 .
 
@@ -1198,7 +1169,7 @@ group[0]
 
 Another example:
 
->> build: [x y] >>
+:build(x y)
     result : [x y]
     result
 .
@@ -1208,7 +1179,7 @@ returns the new Group.
 
 A function may instead expose part of that Group:
 
->> build-first: [x y] >>
+:build-first(x y)
     result : [x y]
     result[0]
 .
@@ -1218,30 +1189,13 @@ Returning a value does not emit it to any output channel.
 
 
 
-Our actual rule is still:
-
-
-
-A function evaluates to its final expression.
-
-The programmer chooses the return value by deliberately making that expression last:
-
->> something: [x] >>
-    result : do-work x
-    result
-.
-
-I would avoid calling that an “explicit return” in the formal spec because there is no return syntax. It's final-expression return semantics.
-
-
-
 23.1 Effect-only functions
 
 If the final operation yields empty, the function yields empty.
 
 Example:
 
->> announce: [message] >>
+:announce(message)
     out(output message)
 .
 
@@ -1258,7 +1212,7 @@ Functions produce one value.
 
 If several logical results are needed, return a Group:
 
->> pair: [x y] >>
+:pair(x y)
     [x y]
 .
 
@@ -1266,14 +1220,14 @@ If several logical results are needed, return a Group:
 Function results may themselves be placed into Groups:
 
 results : [
-    first data
-    second data
+    first(data)
+    second(data)
 ]
 
 
 or inline with explicit grouping:
 
-results : [(first data) (second data)]
+results : [first(data) second(data)]
 
 
 
@@ -1307,12 +1261,12 @@ Repetition is expressed through function calls and recursion.
 
 Example:
 
->> countdown: [n] >>
+:countdown(n)
     if
         n <= 0 >> ..
         else >>
             out(output text(n))
-            countdown (n - 1)
+            countdown(n - 1)
     .
 .
 
@@ -1477,8 +1431,8 @@ The period is the structural terminator.
 
 Example:
 
->> add: [x y] >>
-    x + y
+:add(a b)
+    a + b
 .
 
 
@@ -1531,37 +1485,37 @@ total : price + tax
 Example:
 
 10 >>
-add 5 >>
-multiply 2 >>
-subtract 4
+add(5) >>
+multiply(2) >>
+subtract(4)
 
 
 The flowing result becomes the first parameter of the next call-stage.
 
 Conceptually:
 
-add 10 5
-multiply result 2
-subtract result 4
+add(10 5)
+multiply(result 2)
+subtract(result 4)
 
 
 This encourages subject-first function design.
 
 Example:
 
->> subtract: [x y] >>
+:subtract(x y)
     x - y
 .
 
 
 Then:
 
-10 >> subtract 3
+10 >> subtract(3)
 
 
 means:
 
-subtract 10 3
+subtract(10 3)
 
 
 
@@ -1607,7 +1561,7 @@ x.size
 
 means conceptually:
 
-size x
+size(x)
 
 
 And:
@@ -1617,7 +1571,7 @@ x.size.text
 
 means:
 
-text (size x)
+text(size(x))
 
 
 Dot means:
@@ -1743,7 +1697,7 @@ out(output …) and reads from it with in(input) — see section 38.1.
 
 Reference library operation (NOT a builtin):
 
-split text delimiter
+split(text delimiter)
 
 returns a Group of text values produced by splitting text on delimiter. This is
 ordinary Six — built from size, text indexing, +, Groups, insert, recursion,
@@ -1815,14 +1769,14 @@ out returns .., and a genuine host failure is an ordinary Six runtime error.
 
 A higher-order operation can be implemented using existing Six machinery:
 
->> fold: [list init f] >>
-    _fold list init f 0
+:fold(list init f)
+    _fold(list init f 0)
 .
 
->> _fold: [list acc f i] >>
+:_fold(list acc f i)
     if
-        i >= size list >> acc
-        else           >> _fold list (f acc (list[i])) f (i + 1)
+        i >= size(list) >> acc
+        else            >> _fold(list f(acc list[i]) f (i + 1))
     .
 .
 
@@ -1833,16 +1787,16 @@ No loop syntax is required.
 
 40. Example: map
 
->> map: [list f] >>
-    _map list f 0 []
+:map(list f)
+    _map(list f 0 [])
 .
 
->> _map: [list f i result] >>
+:_map(list f i result)
     if
-        i >= size list >> result
+        i >= size(list) >> result
         else >>
-            insert result (f (list[i]))
-            _map list f (i + 1) result
+            insert(result f(list[i]))
+            _map(list f (i + 1) result)
     .
 .
 
@@ -1853,18 +1807,18 @@ The accumulating Group is intentionally shared through reference semantics.
 
 41. Example: filter
 
->> filter: [list f] >>
-    _filter list f 0 []
+:filter(list f)
+    _filter(list f 0 [])
 .
 
->> _filter: [list f i result] >>
+:_filter(list f i result)
     if
-        i >= size list >> result
+        i >= size(list) >> result
         else >>
-            if f (list[i]) >>
-                insert result (list[i])
+            if
+                f(list[i]) >> insert(result list[i])
             .
-            _filter list f (i + 1) result
+            _filter(list f (i + 1) result)
     .
 .
 
@@ -1873,15 +1827,15 @@ The accumulating Group is intentionally shared through reference semantics.
 
 42. Example: find
 
->> find: [list f] >>
-    _find list f 0
+:find(list f)
+    _find(list f 0)
 .
 
->> _find: [list f i] >>
+:_find(list f i)
     if
-        i >= size list >> ..
-        f (list[i])    >> list[i]
-        else           >> _find list f (i + 1)
+        i >= size(list) >> ..
+        f(list[i])      >> list[i]
+        else            >> _find(list f (i + 1))
     .
 .
 
@@ -1890,24 +1844,24 @@ The accumulating Group is intentionally shared through reference semantics.
 
 43. Example: Word Frequency Counter
 
->> count: [words counts i] >>
+:count(words counts i)
     if
-        i >= size words >> counts
+        i >= size(words) >> counts
         else >>
             word : words[i]
 
             if
-                counts.has word >> counts[word] = counts[word] + 1
+                counts.has(word) >> counts[word] = counts[word] + 1
                 else             >> counts[word] = 1
             .
 
-            count words counts (i + 1)
+            count(words counts (i + 1))
     .
 .
 
->> frequencies: [source] >>
-    words : source.split " "
-    count words [] 0
+:frequencies(source)
+    words : source.split(" ")
+    count(words [] 0)
 .
 
 
@@ -1947,13 +1901,13 @@ Console I/O uses the runtime channels: out(output …) writes, in(input) reads a
 chunk of text. A runnable version in the canonical surface syntax, with a proper
 line reader over in(input), is in examples/guessing_game.six.
 
->> ask: [answer attempts] >>
+:ask(answer attempts)
     out(output "Guess a number from 1 to 100: ")
     guess : number(in(input))
-    check answer attempts guess
+    check(answer attempts guess)
 .
 
->> check: [answer attempts guess] >>
+:check(answer attempts guess)
     attempts = attempts + 1
 
     if
@@ -1969,7 +1923,7 @@ line reader over in(input), is in examples/guessing_game.six.
                 .
 
             out(output (message + "\n"))
-            ask answer attempts
+            ask(answer attempts)
     .
 .
 
@@ -2002,12 +1956,12 @@ Six does not need a Stack type.
 
 stack : []
 
-insert stack 10
-insert stack 20
-insert stack 30
+insert(stack 10)
+insert(stack 20)
+insert(stack 30)
 
 value : stack[$]
-remove stack $
+remove(stack $)
 
 
 After removal:
@@ -2038,12 +1992,12 @@ Six does not need a Queue type.
 
 queue : []
 
-insert queue "A"
-insert queue "B"
-insert queue "C"
+insert(queue "A")
+insert(queue "B")
+insert(queue "C")
 
 value : queue[0]
-remove queue 0
+remove(queue 0)
 
 
 The same Group machinery produces queue behavior merely by changing the accessed position.
