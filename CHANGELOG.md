@@ -3,6 +3,23 @@
 Every fix or feature bumps the version — including REPL changes. `six --version`,
 the REPL banner, and `six --help` all report it.
 
+## v0.1.12
+- Examples: redo the print/input migration as a minimal change and nothing more.
+  The v0.1.10 pass had rewritten example structure beyond removing print/input —
+  it renamed a function and embedded a large buffered input reader. Reverted to
+  the pristine examples and re-applied only the necessary substitution:
+  - print(text) -> out(output text + "\n"); print(scalar) -> out(output
+    text(scalar) + "\n"). No function was renamed.
+  - input(prompt) -> out(output prompt) then in(input); number(in(input)) needs
+    nothing more since number trims surrounding whitespace.
+  - Where an example printed a Group (which has no builtin text form now), the
+    minimal renderer needed for that shape was added and nothing else; binding
+    observes the mutated cell instead of the nested Group.
+  - tiny_inventory keeps its structure and every original function name; it gains
+    only two stand-ins — line (= print) and ask/_chomp (= input, prompt + one
+    line with the trailing newline removed).
+  - Removed reference/io.six (it had been added in v0.1.10, not part of the repo).
+
 ## v0.1.11
 - Docs: rewrite every code example in the embedded spec (`six spec`) into the
   canonical surface syntax the runtime actually accepts. The spec had been
