@@ -7,8 +7,8 @@ insert(stack 20)
 insert(stack 30)
 value : stack[$]
 remove(stack $)
-print(stack)
-print(value)
+out(output stack)
+out(output text(value) + "\n")
 
 # Queue: enqueue with insert, dequeue from the front (0).
 queue : []
@@ -17,5 +17,5 @@ insert(queue "B")
 insert(queue "C")
 first : queue[0]
 remove(queue 0)
-print(queue)
-print(first)
+out(output queue)
+out(output first + "\n")

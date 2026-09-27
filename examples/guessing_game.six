@@ -1,6 +1,7 @@
 # Guessing game (spec §44) in canonical Six syntax.
 :ask(answer attempts)
-    guess : number(input("Guess a number from 1 to 100: "))
+    out(output "Guess a number from 1 to 100: ")
+    guess : number(in(input))
     check(answer attempts guess)
 .
 
@@ -9,8 +10,8 @@
 
     if
         guess == answer >>
-            print("Correct!")
-            print("Attempts: " + text(attempts))
+            out(output "Correct!\n")
+            out(output "Attempts: " + text(attempts) + "\n")
 
         else >>
             message :
@@ -19,7 +20,7 @@
                     else >> "Too high."
                 .
 
-            print(message)
+            out(output message + "\n")
             ask(answer attempts)
     .
 .

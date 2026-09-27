@@ -3,10 +3,10 @@
     if
         n <= 0 >> ..
         else >>
-            print(n)
+            out(output text(n) + "\n")
             countdown(n - 1)
     .
 .
 
 countdown(5)
-print("liftoff")
+out(output "liftoff\n")
